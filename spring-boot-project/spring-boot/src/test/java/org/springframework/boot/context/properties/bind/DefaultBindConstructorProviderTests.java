@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  *
  * @author Phillip Webb
  * @author Madhura Bhave
+ * @author Yanming Zhou
  */
 class DefaultBindConstructorProviderTests {
 
@@ -93,6 +94,12 @@ class DefaultBindConstructorProviderTests {
 	}
 
 	@Test
+	void getBindConstructorWhenIsTypeWithPrivateConstructorReturnsNull() {
+		Constructor<?> constructor = this.provider.getBindConstructor(TypeWithPrivateConstructor.class, false);
+		assertThat(constructor).isNull();
+	}
+
+	@Test
 	void getBindConstructorWhenIsMemberTypeWithPrivateConstructorReturnsNull() {
 		Constructor<?> constructor = this.provider.getBindConstructor(MemberTypeWithPrivateConstructor.Member.class,
 				false);
@@ -121,6 +128,14 @@ class DefaultBindConstructorProviderTests {
 	void getBindConstructorWhenHasExistingValueAndOneConstructorWithConstructorBindingReturnsConstructor() {
 		OneConstructorWithConstructorBinding existingValue = new OneConstructorWithConstructorBinding("name", 123);
 		Bindable<?> bindable = Bindable.of(OneConstructorWithConstructorBinding.class).withExistingValue(existingValue);
+		Constructor<?> bindConstructor = this.provider.getBindConstructor(bindable, false);
+		assertThat(bindConstructor).isNotNull();
+	}
+
+	@Test
+	void getBindConstructorWhenHasExistingValueAndValueIsRecordReturnsConstructor() {
+		OneConstructorOnRecord existingValue = new OneConstructorOnRecord("name", 123);
+		Bindable<?> bindable = Bindable.of(OneConstructorOnRecord.class).withExistingValue(existingValue);
 		Constructor<?> bindConstructor = this.provider.getBindConstructor(bindable, false);
 		assertThat(bindConstructor).isNotNull();
 	}
@@ -199,6 +214,10 @@ class DefaultBindConstructorProviderTests {
 
 	}
 
+	record OneConstructorOnRecord(String name, int age) {
+
+	}
+
 	static class TwoConstructorsWithBothConstructorBinding {
 
 		@ConstructorBinding
@@ -208,6 +227,13 @@ class DefaultBindConstructorProviderTests {
 
 		@ConstructorBinding
 		TwoConstructorsWithBothConstructorBinding(String name, int age) {
+		}
+
+	}
+
+	static final class TypeWithPrivateConstructor {
+
+		private TypeWithPrivateConstructor(Environment environment) {
 		}
 
 	}

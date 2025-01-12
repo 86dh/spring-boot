@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@
 package org.springframework.boot.system;
 
 import java.io.Console;
+import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.SortedSet;
 import java.util.concurrent.Future;
 
 import org.springframework.util.ClassUtils;
@@ -30,32 +32,60 @@ import org.springframework.util.ClassUtils;
  *
  * @author Oliver Gierke
  * @author Phillip Webb
+ * @author Moritz Halbritter
  * @since 2.0.0
  */
 public enum JavaVersion {
 
 	/**
 	 * Java 17.
+	 * @since 2.5.3
 	 */
 	SEVENTEEN("17", Console.class, "charset"),
 
 	/**
 	 * Java 18.
+	 * @since 2.5.11
 	 */
 	EIGHTEEN("18", Duration.class, "isPositive"),
 
 	/**
 	 * Java 19.
+	 * @since 2.6.12
 	 */
-	NINETEEN("19", Future.class, "state");
+	NINETEEN("19", Future.class, "state"),
+
+	/**
+	 * Java 20.
+	 * @since 2.7.13
+	 */
+	TWENTY("20", Class.class, "accessFlags"),
+
+	/**
+	 * Java 21.
+	 * @since 2.7.16
+	 */
+	TWENTY_ONE("21", SortedSet.class, "getFirst"),
+
+	/**
+	 * Java 22.
+	 * @since 3.2.4
+	 */
+	TWENTY_TWO("22", Console.class, "isTerminal"),
+
+	/**
+	 * Java 23.
+	 * @since 3.2.9
+	 */
+	TWENTY_THREE("23", NumberFormat.class, "isStrict");
 
 	private final String name;
 
 	private final boolean available;
 
-	JavaVersion(String name, Class<?> clazz, String methodName) {
+	JavaVersion(String name, Class<?> versionSpecificClass, String versionSpecificMethod) {
 		this.name = name;
-		this.available = ClassUtils.hasMethod(clazz, methodName);
+		this.available = ClassUtils.hasMethod(versionSpecificClass, versionSpecificMethod);
 	}
 
 	@Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,6 +85,7 @@ import org.springframework.util.CollectionUtils;
  * @author Andy Wilkinson
  * @author Marcos Barbero
  * @author Eddú Meléndez
+ * @author Scott Frederick
  * @since 2.0.0
  * @see UndertowServletWebServer
  */
@@ -225,7 +227,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 	 * @param customizers the customizers to set
 	 */
 	public void setDeploymentInfoCustomizers(Collection<? extends UndertowDeploymentInfoCustomizer> customizers) {
-		Assert.notNull(customizers, "Customizers must not be null");
+		Assert.notNull(customizers, "'customizers' must not be null");
 		this.deploymentInfoCustomizers = new LinkedHashSet<>(customizers);
 	}
 
@@ -235,7 +237,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 	 * @param customizers the customizers to add
 	 */
 	public void addDeploymentInfoCustomizers(UndertowDeploymentInfoCustomizer... customizers) {
-		Assert.notNull(customizers, "UndertowDeploymentInfoCustomizers must not be null");
+		Assert.notNull(customizers, "'customizers' must not be null");
 		this.deploymentInfoCustomizers.addAll(Arrays.asList(customizers));
 	}
 
@@ -294,7 +296,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 
 	@Override
 	public WebServer getWebServer(ServletContextInitializer... initializers) {
-		Builder builder = this.delegate.createBuilder(this);
+		Builder builder = this.delegate.createBuilder(this, this::getSslBundle, this::getServerNameSslBundles);
 		DeploymentManager manager = createManager(initializers);
 		return getUndertowWebServer(builder, manager, getPort());
 	}
@@ -367,7 +369,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 		ServletContextInitializer[] mergedInitializers = mergeInitializers(initializers);
 		Initializer initializer = new Initializer(mergedInitializers);
 		deployment.addServletContainerInitializer(new ServletContainerInitializerInfo(Initializer.class,
-				new ImmediateInstanceFactory<ServletContainerInitializer>(initializer), NO_CLASSES));
+				new ImmediateInstanceFactory<>(initializer), NO_CLASSES));
 	}
 
 	private ClassLoader getServletClassLoader() {
@@ -553,7 +555,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 
 		private URLResource getMetaInfResource(URL resourceJar, String path) {
 			try {
-				String urlPath = URLEncoder.encode(ENCODED_SLASH.matcher(path).replaceAll("/"), "UTF-8");
+				String urlPath = URLEncoder.encode(ENCODED_SLASH.matcher(path).replaceAll("/"), StandardCharsets.UTF_8);
 				URL resourceUrl = new URL(resourceJar + "META-INF/resources" + urlPath);
 				URLResource resource = new URLResource(resourceUrl, path);
 				if (resource.getContentLength() < 0) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -152,7 +152,7 @@ class MimeMappingsTests {
 	@Test
 	void mimeTypesInDefaultMappingsAreCorrectlyStructured() {
 		String regName = "[A-Za-z0-9!#$&.+\\-^_]{1,127}";
-		Pattern pattern = Pattern.compile("^" + regName + "\\/" + regName + "$");
+		Pattern pattern = Pattern.compile("^" + regName + "/" + regName + "$");
 		assertThat(MimeMappings.DEFAULT).allSatisfy((mapping) -> assertThat(mapping.getMimeType()).matches(pattern));
 	}
 
@@ -221,7 +221,7 @@ class MimeMappingsTests {
 			.loadProperties(new ClassPathResource("mime-mappings.properties", getClass()));
 		Properties tomcatDefaultMimeMappings = PropertiesLoaderUtils
 			.loadProperties(new ClassPathResource("MimeTypeMappings.properties", Tomcat.class));
-		assertThat(ourDefaultMimeMappings).isEqualTo(tomcatDefaultMimeMappings);
+		assertThat(ourDefaultMimeMappings).containsExactlyInAnyOrderEntriesOf(tomcatDefaultMimeMappings);
 	}
 
 	@Test

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import java.io.StringReader;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.jar.JarOutputStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.TaskOutcome;
@@ -47,53 +49,56 @@ class JavaPluginActionIntegrationTests {
 
 	@TestTemplate
 	void noBootJarTaskWithoutJavaPluginApplied() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootJar").getOutput())
-			.contains("bootJar exists = false");
+		assertThat(this.gradleBuild.build("tasks").getOutput()).doesNotContain("bootJar");
 	}
 
 	@TestTemplate
 	void applyingJavaPluginCreatesBootJarTask() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootJar", "-PapplyJavaPlugin").getOutput())
-			.contains("bootJar exists = true");
+		assertThat(this.gradleBuild.build("tasks").getOutput()).contains("bootJar");
 	}
 
 	@TestTemplate
 	void noBootRunTaskWithoutJavaPluginApplied() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootRun").getOutput())
-			.contains("bootRun exists = false");
+		assertThat(this.gradleBuild.build("tasks").getOutput()).doesNotContain("bootRun");
+	}
+
+	@TestTemplate
+	void noBootTestRunTaskWithoutJavaPluginApplied() {
+		assertThat(this.gradleBuild.build("tasks").getOutput()).doesNotContain("bootTestRun");
 	}
 
 	@TestTemplate
 	void applyingJavaPluginCreatesBootRunTask() {
-		assertThat(this.gradleBuild.build("taskExists", "-PtaskName=bootRun", "-PapplyJavaPlugin").getOutput())
-			.contains("bootRun exists = true");
+		assertThat(this.gradleBuild.build("tasks").getOutput()).contains("bootRun");
+	}
+
+	@TestTemplate
+	void applyingJavaPluginCreatesBootTestRunTask() {
+		assertThat(this.gradleBuild.build("tasks").getOutput()).contains("bootTestRun");
 	}
 
 	@TestTemplate
 	void javaCompileTasksUseUtf8Encoding() {
-		assertThat(this.gradleBuild.build("javaCompileEncoding", "-PapplyJavaPlugin").getOutput())
-			.contains("compileJava = UTF-8")
+		assertThat(this.gradleBuild.build("build").getOutput()).contains("compileJava = UTF-8")
 			.contains("compileTestJava = UTF-8");
 	}
 
 	@TestTemplate
 	void javaCompileTasksUseParametersCompilerFlagByDefault() {
-		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
-			.contains("compileJava compiler args: [-parameters]")
+		assertThat(this.gradleBuild.build("build").getOutput()).contains("compileJava compiler args: [-parameters]")
 			.contains("compileTestJava compiler args: [-parameters]");
 	}
 
 	@TestTemplate
 	void javaCompileTasksUseParametersAndAdditionalCompilerFlags() {
-		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
+		assertThat(this.gradleBuild.build("build").getOutput())
 			.contains("compileJava compiler args: [-parameters, -Xlint:all]")
 			.contains("compileTestJava compiler args: [-parameters, -Xlint:all]");
 	}
 
 	@TestTemplate
 	void javaCompileTasksCanOverrideDefaultParametersCompilerFlag() {
-		assertThat(this.gradleBuild.build("javaCompileTasksCompilerArgs").getOutput())
-			.contains("compileJava compiler args: [-Xlint:all]")
+		assertThat(this.gradleBuild.build("build").getOutput()).contains("compileJava compiler args: [-Xlint:all]")
 			.contains("compileTestJava compiler args: [-Xlint:all]");
 	}
 
@@ -139,35 +144,70 @@ class JavaPluginActionIntegrationTests {
 
 	@TestTemplate
 	void applyingJavaPluginCreatesDevelopmentOnlyConfiguration() {
-		assertThat(this.gradleBuild
-			.build("configurationExists", "-PconfigurationName=developmentOnly", "-PapplyJavaPlugin")
-			.getOutput()).contains("developmentOnly exists = true");
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("developmentOnly exists = true");
 	}
 
 	@TestTemplate
-	void productionRuntimeClasspathIsConfiguredWithAttributes() {
-		assertThat(this.gradleBuild
-			.build("configurationAttributes", "-PconfigurationName=productionRuntimeClasspath", "-PapplyJavaPlugin")
-			.getOutput()).contains("3 productionRuntimeClasspath attributes:")
-			.contains("org.gradle.usage: java-runtime")
-			.contains("org.gradle.libraryelements: jar")
-			.contains("org.gradle.dependency.bundling: external");
+	void applyingJavaPluginCreatesTestAndDevelopmentOnlyConfiguration() {
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("testAndDevelopmentOnly exists = true");
+	}
+
+	@TestTemplate
+	void testCompileClasspathIncludesTestAndDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void testRuntimeClasspathIncludesTestAndDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void testCompileClasspathDoesNotIncludeDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).doesNotContain("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void testRuntimeClasspathDoesNotIncludeDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).doesNotContain("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void compileClasspathDoesNotIncludeTestAndDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).doesNotContain("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void runtimeClasspathIncludesTestAndDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void compileClasspathDoesNotIncludeDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).doesNotContain("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void runtimeClasspathIncludesDevelopmentOnlyDependencies() {
+		assertThat(this.gradleBuild.build("help").getOutput()).contains("commons-lang3-3.12.0.jar");
+	}
+
+	@TestTemplate
+	void productionRuntimeClasspathIsConfiguredWithAttributesThatMatchRuntimeClasspath() {
+		String output = this.gradleBuild.build("build").getOutput();
+		Matcher matcher = Pattern.compile("runtimeClasspath: (\\[.*])").matcher(output);
+		assertThat(matcher.find()).as("%s found in %s", matcher, output).isTrue();
+		String attributes = matcher.group(1);
+		assertThat(output).contains("productionRuntimeClasspath: " + attributes);
 	}
 
 	@TestTemplate
 	void productionRuntimeClasspathIsConfiguredWithResolvabilityAndConsumabilityThatMatchesRuntimeClasspath() {
-		String runtime = this.gradleBuild
-			.build("configurationResolvabilityAndConsumability", "-PconfigurationName=runtimeClasspath",
-					"-PapplyJavaPlugin")
-			.getOutput();
-		assertThat(runtime).contains("canBeResolved: true");
-		assertThat(runtime).contains("canBeConsumed: false");
-		String productionRuntime = this.gradleBuild
-			.build("configurationResolvabilityAndConsumability", "-PconfigurationName=productionRuntimeClasspath",
-					"-PapplyJavaPlugin")
-			.getOutput();
-		assertThat(productionRuntime).contains("canBeResolved: true");
-		assertThat(productionRuntime).contains("canBeConsumed: false");
+		String output = this.gradleBuild.build("build").getOutput();
+		assertThat(output).contains("runtimeClasspath canBeResolved: true");
+		assertThat(output).contains("runtimeClasspath canBeConsumed: false");
+		assertThat(output).contains("productionRuntimeClasspath canBeResolved: true");
+		assertThat(output).contains("productionRuntimeClasspath canBeConsumed: false");
 	}
 
 	@TestTemplate

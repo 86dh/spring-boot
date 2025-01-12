@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.TaskOutcome;
@@ -42,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  * @author Scott Frederick
  */
-@GradleCompatibility(configurationCache = false)
+@GradleCompatibility
 class NativeImagePluginActionIntegrationTests {
 
 	GradleBuild gradleBuild;
@@ -88,14 +89,14 @@ class NativeImagePluginActionIntegrationTests {
 	}
 
 	@TestTemplate
-	void bootBuildImageIsConfiguredToBuildANativeImage() {
+	void developmentOnlyDependenciesDoNotAppearInNativeImageClasspath() {
 		writeDummySpringApplicationAotProcessorMainClass();
-		BuildResult result = this.gradleBuild.build("bootBuildImageConfiguration");
-		assertThat(result.getOutput()).contains("paketobuildpacks/builder:tiny").contains("BP_NATIVE_IMAGE = true");
+		BuildResult result = this.gradleBuild.build("checkNativeImageClasspath");
+		assertThat(result.getOutput()).doesNotContain("commons-lang");
 	}
 
 	@TestTemplate
-	void developmentOnlyDependenciesDoNotAppearInNativeImageClasspath() {
+	void testAndDevelopmentOnlyDependenciesDoNotAppearInNativeImageClasspath() {
 		writeDummySpringApplicationAotProcessorMainClass();
 		BuildResult result = this.gradleBuild.build("checkNativeImageClasspath");
 		assertThat(result.getOutput()).doesNotContain("commons-lang");
@@ -116,9 +117,15 @@ class NativeImagePluginActionIntegrationTests {
 	}
 
 	@TestTemplate
-	void nativeImageBinariesRequireGraal22Dot3() {
-		BuildResult result = this.gradleBuild.build("requiredGraalVersion");
-		assertThat(result.getOutput()).contains("custom: 22.3", "main: 22.3", "test: 22.3");
+	void nativeEntryIsAddedToManifest() throws IOException {
+		writeDummySpringApplicationAotProcessorMainClass();
+		BuildResult result = this.gradleBuild.build("bootJar");
+		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		File buildLibs = new File(this.gradleBuild.getProjectDir(), "build/libs");
+		try (JarFile jarFile = new JarFile(new File(buildLibs, this.gradleBuild.getProjectDir().getName() + ".jar"))) {
+			Manifest manifest = jarFile.getManifest();
+			assertThat(manifest.getMainAttributes().getValue("Spring-Boot-Native-Processed")).isEqualTo("true");
+		}
 	}
 
 	private String projectPath(String path) {

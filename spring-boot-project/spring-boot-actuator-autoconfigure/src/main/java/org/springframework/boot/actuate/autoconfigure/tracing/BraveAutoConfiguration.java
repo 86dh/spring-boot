@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.springframework.boot.actuate.autoconfigure.tracing;
 
-import java.util.Collections;
 import java.util.List;
 
 import brave.CurrentSpanCustomizer;
@@ -25,19 +24,8 @@ import brave.Tracer;
 import brave.Tracing;
 import brave.Tracing.Builder;
 import brave.TracingCustomizer;
-import brave.baggage.BaggageField;
-import brave.baggage.BaggagePropagation;
-import brave.baggage.BaggagePropagation.FactoryBuilder;
-import brave.baggage.BaggagePropagationConfig;
-import brave.baggage.BaggagePropagationCustomizer;
-import brave.baggage.CorrelationScopeConfig;
-import brave.baggage.CorrelationScopeCustomizer;
-import brave.baggage.CorrelationScopeDecorator;
-import brave.context.slf4j.MDCScopeDecorator;
 import brave.handler.SpanHandler;
-import brave.propagation.B3Propagation;
 import brave.propagation.CurrentTraceContext;
-import brave.propagation.CurrentTraceContext.ScopeDecorator;
 import brave.propagation.CurrentTraceContextCustomizer;
 import brave.propagation.Propagation.Factory;
 import brave.propagation.ThreadLocalCurrentTraceContext;
@@ -48,20 +36,20 @@ import io.micrometer.tracing.brave.bridge.BravePropagator;
 import io.micrometer.tracing.brave.bridge.BraveSpanCustomizer;
 import io.micrometer.tracing.brave.bridge.BraveTracer;
 import io.micrometer.tracing.brave.bridge.CompositeSpanHandler;
-import io.micrometer.tracing.brave.bridge.W3CPropagation;
 import io.micrometer.tracing.exporter.SpanExportingPredicate;
 import io.micrometer.tracing.exporter.SpanFilter;
 import io.micrometer.tracing.exporter.SpanReporter;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.actuate.autoconfigure.tracing.TracingProperties.Propagation.PropagationType;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.IncompatibleConfigurationException;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
@@ -71,20 +59,27 @@ import org.springframework.core.env.Environment;
  *
  * @author Moritz Halbritter
  * @author Marcin Grzejszczak
+ * @author Jonatan Ivanov
  * @since 3.0.0
  */
-@AutoConfiguration(before = MicrometerTracingAutoConfiguration.class)
+@AutoConfiguration(before = { MicrometerTracingAutoConfiguration.class, NoopTracerAutoConfiguration.class })
 @ConditionalOnClass({ Tracer.class, BraveTracer.class })
 @EnableConfigurationProperties(TracingProperties.class)
-@ConditionalOnEnabledTracing
+@Import({ BravePropagationConfigurations.PropagationWithoutBaggage.class,
+		BravePropagationConfigurations.PropagationWithBaggage.class,
+		BravePropagationConfigurations.NoPropagation.class })
 public class BraveAutoConfiguration {
-
-	private static final BraveBaggageManager BRAVE_BAGGAGE_MANAGER = new BraveBaggageManager();
 
 	/**
 	 * Default value for application name if {@code spring.application.name} is not set.
 	 */
 	private static final String DEFAULT_APPLICATION_NAME = "application";
+
+	private final TracingProperties tracingProperties;
+
+	BraveAutoConfiguration(TracingProperties tracingProperties) {
+		this.tracingProperties = tracingProperties;
+	}
 
 	@Bean
 	@ConditionalOnMissingBean
@@ -97,14 +92,31 @@ public class BraveAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public Tracing braveTracing(Environment environment, List<SpanHandler> spanHandlers,
+	Tracing braveTracing(Environment environment, List<SpanHandler> spanHandlers,
 			List<TracingCustomizer> tracingCustomizers, CurrentTraceContext currentTraceContext,
 			Factory propagationFactory, Sampler sampler) {
+		if (this.tracingProperties.getBrave().isSpanJoiningSupported()) {
+			if (this.tracingProperties.getPropagation().getType() != null
+					&& this.tracingProperties.getPropagation().getType().contains(PropagationType.W3C)) {
+				throw new IncompatibleConfigurationException("management.tracing.propagation.type",
+						"management.tracing.brave.span-joining-supported");
+			}
+			if (this.tracingProperties.getPropagation().getType() == null
+					&& this.tracingProperties.getPropagation().getProduce().contains(PropagationType.W3C)) {
+				throw new IncompatibleConfigurationException("management.tracing.propagation.produce",
+						"management.tracing.brave.span-joining-supported");
+			}
+			if (this.tracingProperties.getPropagation().getType() == null
+					&& this.tracingProperties.getPropagation().getConsume().contains(PropagationType.W3C)) {
+				throw new IncompatibleConfigurationException("management.tracing.propagation.consume",
+						"management.tracing.brave.span-joining-supported");
+			}
+		}
 		String applicationName = environment.getProperty("spring.application.name", DEFAULT_APPLICATION_NAME);
 		Builder builder = Tracing.newBuilder()
 			.currentTraceContext(currentTraceContext)
 			.traceId128Bit(true)
-			.supportsJoin(false)
+			.supportsJoin(this.tracingProperties.getBrave().isSpanJoiningSupported())
 			.propagationFactory(propagationFactory)
 			.sampler(sampler)
 			.localServiceName(applicationName);
@@ -117,13 +129,13 @@ public class BraveAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public brave.Tracer braveTracer(Tracing tracing) {
+	brave.Tracer braveTracer(Tracing tracing) {
 		return tracing.tracer();
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
-	public CurrentTraceContext braveCurrentTraceContext(List<CurrentTraceContext.ScopeDecorator> scopeDecorators,
+	CurrentTraceContext braveCurrentTraceContext(List<CurrentTraceContext.ScopeDecorator> scopeDecorators,
 			List<CurrentTraceContextCustomizer> currentTraceContextCustomizers) {
 		ThreadLocalCurrentTraceContext.Builder builder = ThreadLocalCurrentTraceContext.newBuilder();
 		scopeDecorators.forEach(builder::addScopeDecorator);
@@ -135,14 +147,16 @@ public class BraveAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public Sampler braveSampler(TracingProperties properties) {
-		return Sampler.create(properties.getSampling().getProbability());
+	Sampler braveSampler() {
+		return Sampler.create(this.tracingProperties.getSampling().getProbability());
 	}
 
 	@Bean
 	@ConditionalOnMissingBean(io.micrometer.tracing.Tracer.class)
 	BraveTracer braveTracerBridge(brave.Tracer tracer, CurrentTraceContext currentTraceContext) {
-		return new BraveTracer(tracer, new BraveCurrentTraceContext(currentTraceContext), BRAVE_BAGGAGE_MANAGER);
+		return new BraveTracer(tracer, new BraveCurrentTraceContext(currentTraceContext),
+				new BraveBaggageManager(this.tracingProperties.getBaggage().getTagFields(),
+						this.tracingProperties.getBaggage().getRemoteFields()));
 	}
 
 	@Bean
@@ -161,95 +175,6 @@ public class BraveAutoConfiguration {
 	@ConditionalOnMissingBean(io.micrometer.tracing.SpanCustomizer.class)
 	BraveSpanCustomizer braveSpanCustomizer(SpanCustomizer spanCustomizer) {
 		return new BraveSpanCustomizer(spanCustomizer);
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnProperty(value = "management.tracing.baggage.enabled", havingValue = "false")
-	static class BraveNoBaggageConfiguration {
-
-		@Bean
-		@ConditionalOnMissingBean
-		Factory propagationFactory(TracingProperties tracing) {
-			return switch (tracing.getPropagation().getType()) {
-				case B3 ->
-					B3Propagation.newFactoryBuilder().injectFormat(B3Propagation.Format.SINGLE_NO_PARENT).build();
-				case W3C -> new W3CPropagation();
-			};
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	@ConditionalOnProperty(value = "management.tracing.baggage.enabled", matchIfMissing = true)
-	static class BraveBaggageConfiguration {
-
-		private final TracingProperties tracingProperties;
-
-		BraveBaggageConfiguration(TracingProperties tracingProperties) {
-			this.tracingProperties = tracingProperties;
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		BaggagePropagation.FactoryBuilder propagationFactoryBuilder(
-				ObjectProvider<BaggagePropagationCustomizer> baggagePropagationCustomizers) {
-			Factory delegate = switch (this.tracingProperties.getPropagation().getType()) {
-				case B3 ->
-					B3Propagation.newFactoryBuilder().injectFormat(B3Propagation.Format.SINGLE_NO_PARENT).build();
-				case W3C -> new W3CPropagation(BRAVE_BAGGAGE_MANAGER, Collections.emptyList());
-			};
-			FactoryBuilder builder = BaggagePropagation.newFactoryBuilder(delegate);
-			baggagePropagationCustomizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
-			return builder;
-		}
-
-		@Bean
-		@Order(0)
-		BaggagePropagationCustomizer remoteFieldsBaggagePropagationCustomizer() {
-			return (builder) -> {
-				List<String> remoteFields = this.tracingProperties.getBaggage().getRemoteFields();
-				for (String fieldName : remoteFields) {
-					builder.add(BaggagePropagationConfig.SingleBaggageField.remote(BaggageField.create(fieldName)));
-				}
-			};
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		Factory propagationFactory(BaggagePropagation.FactoryBuilder factoryBuilder) {
-			return factoryBuilder.build();
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		CorrelationScopeDecorator.Builder mdcCorrelationScopeDecoratorBuilder(
-				ObjectProvider<CorrelationScopeCustomizer> correlationScopeCustomizers) {
-			CorrelationScopeDecorator.Builder builder = MDCScopeDecorator.newBuilder();
-			correlationScopeCustomizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
-			return builder;
-		}
-
-		@Bean
-		@Order(0)
-		@ConditionalOnProperty(prefix = "management.tracing.baggage.correlation", name = "enabled",
-				matchIfMissing = true)
-		CorrelationScopeCustomizer correlationFieldsCorrelationScopeCustomizer() {
-			return (builder) -> {
-				List<String> correlationFields = this.tracingProperties.getBaggage().getCorrelation().getFields();
-				for (String field : correlationFields) {
-					builder.add(CorrelationScopeConfig.SingleCorrelationField.newBuilder(BaggageField.create(field))
-						.flushOnUpdate()
-						.build());
-				}
-			};
-		}
-
-		@Bean
-		@ConditionalOnMissingBean(CorrelationScopeDecorator.class)
-		ScopeDecorator correlationScopeDecorator(CorrelationScopeDecorator.Builder builder) {
-			return builder.build();
-		}
-
 	}
 
 }

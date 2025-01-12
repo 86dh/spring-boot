@@ -17,13 +17,17 @@
 package org.springframework.boot.autoconfigure.elasticsearch;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.config.Registry;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
+import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.elasticsearch.client.Node;
 import org.elasticsearch.client.RestClient;
@@ -32,10 +36,14 @@ import org.elasticsearch.client.sniff.Sniffer;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchConnectionDetails.Node.Protocol;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientConfigurations.PropertiesElasticsearchConnectionDetails;
+import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.then;
@@ -49,11 +57,13 @@ import static org.mockito.Mockito.mock;
  * @author Evgeniy Cheban
  * @author Filip Hrisafov
  * @author Andy Wilkinson
+ * @author Moritz Halbritter
+ * @author Phillip Webb
  */
 class ElasticsearchRestClientAutoConfigurationTests {
 
-	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-		.withConfiguration(AutoConfigurations.of(ElasticsearchRestClientAutoConfiguration.class));
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(
+			AutoConfigurations.of(ElasticsearchRestClientAutoConfiguration.class, SslAutoConfiguration.class));
 
 	@Test
 	void configureShouldCreateRestClientBuilderAndRestClient() {
@@ -241,6 +251,99 @@ class ElasticsearchRestClientAutoConfigurationTests {
 			assertThat(sniffer).isSameAs(customSniffer);
 			then(customSniffer).shouldHaveNoInteractions();
 		});
+	}
+
+	@Test
+	void definesPropertiesBasedConnectionDetailsByDefault() {
+		this.contextRunner
+			.run((context) -> assertThat(context).hasSingleBean(PropertiesElasticsearchConnectionDetails.class));
+	}
+
+	@Test
+	void shouldUseCustomConnectionDetailsWhenDefined() {
+		this.contextRunner.withUserConfiguration(ConnectionDetailsConfiguration.class).run((context) -> {
+			assertThat(context).hasSingleBean(RestClient.class)
+				.hasSingleBean(ElasticsearchConnectionDetails.class)
+				.doesNotHaveBean(PropertiesElasticsearchConnectionDetails.class);
+			RestClient restClient = context.getBean(RestClient.class);
+			assertThat(restClient).hasFieldOrPropertyWithValue("pathPrefix", "/some-path");
+			assertThat(restClient.getNodes().stream().map(Node::getHost).map(HttpHost::toString))
+				.containsExactly("http://elastic.example.com:9200");
+			assertThat(restClient)
+				.extracting("client.credentialsProvider", InstanceOfAssertFactories.type(CredentialsProvider.class))
+				.satisfies((credentialsProvider) -> {
+					Credentials uriCredentials = credentialsProvider
+						.getCredentials(new AuthScope("any.elastic.example.com", 80));
+					assertThat(uriCredentials.getUserPrincipal().getName()).isEqualTo("user-1");
+					assertThat(uriCredentials.getPassword()).isEqualTo("password-1");
+				})
+				.satisfies((credentialsProvider) -> {
+					Credentials uriCredentials = credentialsProvider
+						.getCredentials(new AuthScope("elastic.example.com", 9200));
+					assertThat(uriCredentials.getUserPrincipal().getName()).isEqualTo("node-user-1");
+					assertThat(uriCredentials.getPassword()).isEqualTo("node-password-1");
+				});
+
+		});
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void configureWithSslBundle() {
+		List<String> properties = new ArrayList<>();
+		properties.add("spring.elasticsearch.restclient.ssl.bundle=mybundle");
+		properties.add("spring.ssl.bundle.jks.mybundle.truststore.location=classpath:test.jks");
+		properties.add("spring.ssl.bundle.jks.mybundle.options.ciphers=DESede");
+		properties.add("spring.ssl.bundle.jks.mybundle.options.enabled-protocols=TLSv1.3");
+		this.contextRunner.withPropertyValues(properties.toArray(String[]::new)).run((context) -> {
+			assertThat(context).hasSingleBean(RestClient.class);
+			RestClient restClient = context.getBean(RestClient.class);
+			Object client = ReflectionTestUtils.getField(restClient, "client");
+			Object connmgr = ReflectionTestUtils.getField(client, "connmgr");
+			Registry<SchemeIOSessionStrategy> registry = (Registry<SchemeIOSessionStrategy>) ReflectionTestUtils
+				.getField(connmgr, "ioSessionFactoryRegistry");
+			SchemeIOSessionStrategy strategy = registry.lookup("https");
+			assertThat(strategy).extracting("sslContext").isNotNull();
+			assertThat(strategy).extracting("supportedCipherSuites")
+				.asInstanceOf(InstanceOfAssertFactories.ARRAY)
+				.containsExactly("DESede");
+			assertThat(strategy).extracting("supportedProtocols")
+				.asInstanceOf(InstanceOfAssertFactories.ARRAY)
+				.containsExactly("TLSv1.3");
+		});
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ConnectionDetailsConfiguration {
+
+		@Bean
+		ElasticsearchConnectionDetails elasticsearchConnectionDetails() {
+			return new ElasticsearchConnectionDetails() {
+
+				@Override
+				public List<Node> getNodes() {
+					return List
+						.of(new Node("elastic.example.com", 9200, Protocol.HTTP, "node-user-1", "node-password-1"));
+				}
+
+				@Override
+				public String getUsername() {
+					return "user-1";
+				}
+
+				@Override
+				public String getPassword() {
+					return "password-1";
+				}
+
+				@Override
+				public String getPathPrefix() {
+					return "/some-path";
+				}
+
+			};
+		}
+
 	}
 
 	@Configuration(proxyBeanMethods = false)

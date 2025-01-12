@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,8 @@
 
 package org.springframework.boot.jackson;
 
-import java.util.Collection;
-
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-
-import org.springframework.context.ApplicationContext;
-import org.springframework.util.Assert;
 
 /**
  * Spring Bean and Jackson {@link Module} to find and
@@ -35,22 +30,6 @@ import org.springframework.util.Assert;
  * @see JsonMixin
  */
 public class JsonMixinModule extends SimpleModule {
-
-	public JsonMixinModule() {
-	}
-
-	/**
-	 * Create a new {@link JsonMixinModule} instance.
-	 * @param context the source application context
-	 * @param basePackages the packages to check for annotated classes
-	 * @deprecated since 3.0.0 in favor of
-	 * {@link #registerEntries(JsonMixinModuleEntries, ClassLoader)}
-	 */
-	@Deprecated(since = "3.0.0", forRemoval = true)
-	public JsonMixinModule(ApplicationContext context, Collection<String> basePackages) {
-		Assert.notNull(context, "Context must not be null");
-		registerEntries(JsonMixinModuleEntries.scan(context, basePackages), context.getClassLoader());
-	}
 
 	/**
 	 * Register the specified {@link JsonMixinModuleEntries entries}.

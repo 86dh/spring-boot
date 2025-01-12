@@ -21,16 +21,21 @@ import java.time.Duration;
 import io.micrometer.core.instrument.simple.CountingMode;
 import org.junit.jupiter.api.Test;
 
-import org.springframework.boot.actuate.autoconfigure.metrics.export.signalfx.SignalFxPropertiesConfigAdapter;
+import org.springframework.boot.actuate.autoconfigure.metrics.export.properties.AbstractPropertiesConfigAdapterTests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests for {@link SignalFxPropertiesConfigAdapter}.
+ * Tests for {@link SimplePropertiesConfigAdapter}.
  *
  * @author Mirko Sobeck
  */
-class SimplePropertiesConfigAdapterTests {
+class SimplePropertiesConfigAdapterTests
+		extends AbstractPropertiesConfigAdapterTests<SimpleProperties, SimplePropertiesConfigAdapter> {
+
+	SimplePropertiesConfigAdapterTests() {
+		super(SimplePropertiesConfigAdapter.class);
+	}
 
 	@Test
 	void whenPropertiesStepIsSetAdapterStepReturnsIt() {
@@ -40,7 +45,7 @@ class SimplePropertiesConfigAdapterTests {
 	}
 
 	@Test
-	void whenPropertiesAccessTokenIsSetAdapterAccessTokenReturnsIt() {
+	void whenPropertiesModeIsSetAdapterModeReturnsIt() {
 		SimpleProperties properties = new SimpleProperties();
 		properties.setMode(CountingMode.STEP);
 		assertThat(new SimplePropertiesConfigAdapter(properties).mode()).isEqualTo(CountingMode.STEP);

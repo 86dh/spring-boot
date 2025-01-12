@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.springframework.boot.autoconfigure.mongo;
 
 import com.mongodb.MongoClientSettings;
 import com.mongodb.MongoClientSettings.Builder;
-import com.mongodb.connection.netty.NettyStreamFactoryFactory;
+import com.mongodb.connection.TransportSettings;
 import com.mongodb.reactivestreams.client.MongoClient;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -32,6 +32,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -49,6 +50,12 @@ import org.springframework.core.annotation.Order;
 @ConditionalOnClass({ MongoClient.class, Flux.class })
 @EnableConfigurationProperties(MongoProperties.class)
 public class MongoReactiveAutoConfiguration {
+
+	@Bean
+	@ConditionalOnMissingBean(MongoConnectionDetails.class)
+	PropertiesMongoConnectionDetails mongoConnectionDetails(MongoProperties properties) {
+		return new PropertiesMongoConnectionDetails(properties);
+	}
 
 	@Bean
 	@ConditionalOnMissingBean
@@ -69,8 +76,10 @@ public class MongoReactiveAutoConfiguration {
 		}
 
 		@Bean
-		MongoPropertiesClientSettingsBuilderCustomizer mongoPropertiesCustomizer(MongoProperties properties) {
-			return new MongoPropertiesClientSettingsBuilderCustomizer(properties);
+		StandardMongoClientSettingsBuilderCustomizer standardMongoSettingsCustomizer(MongoProperties properties,
+				MongoConnectionDetails connectionDetails, ObjectProvider<SslBundles> sslBundles) {
+			return new StandardMongoClientSettingsBuilderCustomizer(connectionDetails.getConnectionString(),
+					properties.getUuidRepresentation(), properties.getSsl(), sslBundles.getIfAvailable());
 		}
 
 	}
@@ -104,11 +113,10 @@ public class MongoReactiveAutoConfiguration {
 
 		@Override
 		public void customize(Builder builder) {
-			if (!isStreamFactoryFactoryDefined(this.settings.getIfAvailable())) {
+			if (!isCustomTransportConfiguration(this.settings.getIfAvailable())) {
 				NioEventLoopGroup eventLoopGroup = new NioEventLoopGroup();
 				this.eventLoopGroup = eventLoopGroup;
-				builder
-					.streamFactoryFactory(NettyStreamFactoryFactory.builder().eventLoopGroup(eventLoopGroup).build());
+				builder.transportSettings(TransportSettings.nettyBuilder().eventLoopGroup(eventLoopGroup).build());
 			}
 		}
 
@@ -121,8 +129,8 @@ public class MongoReactiveAutoConfiguration {
 			}
 		}
 
-		private boolean isStreamFactoryFactoryDefined(MongoClientSettings settings) {
-			return settings != null && settings.getStreamFactoryFactory() != null;
+		private boolean isCustomTransportConfiguration(MongoClientSettings settings) {
+			return settings != null && settings.getTransportSettings() != null;
 		}
 
 	}

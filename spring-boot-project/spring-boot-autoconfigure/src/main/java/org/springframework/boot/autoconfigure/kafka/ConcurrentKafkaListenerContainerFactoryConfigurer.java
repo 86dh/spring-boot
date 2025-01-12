@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@
 package org.springframework.boot.autoconfigure.kafka;
 
 import java.time.Duration;
+import java.util.function.Function;
 
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties.Listener;
 import org.springframework.boot.context.properties.PropertyMapper;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -28,9 +30,11 @@ import org.springframework.kafka.listener.BatchInterceptor;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.ConsumerAwareRebalanceListener;
 import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.listener.adapter.RecordFilterStrategy;
-import org.springframework.kafka.support.converter.MessageConverter;
+import org.springframework.kafka.support.converter.BatchMessageConverter;
+import org.springframework.kafka.support.converter.RecordMessageConverter;
 import org.springframework.kafka.transaction.KafkaAwareTransactionManager;
 
 /**
@@ -39,13 +43,16 @@ import org.springframework.kafka.transaction.KafkaAwareTransactionManager;
  * @author Gary Russell
  * @author Eddú Meléndez
  * @author Thomas Kåsene
+ * @author Moritz Halbritter
  * @since 1.5.0
  */
 public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 
 	private KafkaProperties properties;
 
-	private MessageConverter messageConverter;
+	private BatchMessageConverter batchMessageConverter;
+
+	private RecordMessageConverter recordMessageConverter;
 
 	private RecordFilterStrategy<Object, Object> recordFilterStrategy;
 
@@ -63,6 +70,10 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 
 	private BatchInterceptor<Object, Object> batchInterceptor;
 
+	private Function<MessageListenerContainer, String> threadNameSupplier;
+
+	private SimpleAsyncTaskExecutor listenerTaskExecutor;
+
 	/**
 	 * Set the {@link KafkaProperties} to use.
 	 * @param properties the properties
@@ -72,11 +83,19 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 	}
 
 	/**
-	 * Set the {@link MessageConverter} to use.
-	 * @param messageConverter the message converter
+	 * Set the {@link BatchMessageConverter} to use.
+	 * @param batchMessageConverter the message converter
 	 */
-	void setMessageConverter(MessageConverter messageConverter) {
-		this.messageConverter = messageConverter;
+	void setBatchMessageConverter(BatchMessageConverter batchMessageConverter) {
+		this.batchMessageConverter = batchMessageConverter;
+	}
+
+	/**
+	 * Set the {@link RecordMessageConverter} to use.
+	 * @param recordMessageConverter the message converter
+	 */
+	void setRecordMessageConverter(RecordMessageConverter recordMessageConverter) {
+		this.recordMessageConverter = recordMessageConverter;
 	}
 
 	/**
@@ -146,6 +165,22 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 	}
 
 	/**
+	 * Set the thread name supplier to use.
+	 * @param threadNameSupplier the thread name supplier to use
+	 */
+	void setThreadNameSupplier(Function<MessageListenerContainer, String> threadNameSupplier) {
+		this.threadNameSupplier = threadNameSupplier;
+	}
+
+	/**
+	 * Set the executor for threads that poll the consumer.
+	 * @param listenerTaskExecutor task executor
+	 */
+	void setListenerTaskExecutor(SimpleAsyncTaskExecutor listenerTaskExecutor) {
+		this.listenerTaskExecutor = listenerTaskExecutor;
+	}
+
+	/**
 	 * Configure the specified Kafka listener container factory. The factory can be
 	 * further tuned and default settings can be overridden.
 	 * @param listenerFactory the {@link ConcurrentKafkaListenerContainerFactory} instance
@@ -164,7 +199,8 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 		Listener properties = this.properties.getListener();
 		map.from(properties::getConcurrency).to(factory::setConcurrency);
 		map.from(properties::isAutoStartup).to(factory::setAutoStartup);
-		map.from(this.messageConverter).to(factory::setMessageConverter);
+		map.from(this.batchMessageConverter).to(factory::setBatchMessageConverter);
+		map.from(this.recordMessageConverter).to(factory::setRecordMessageConverter);
 		map.from(this.recordFilterStrategy).to(factory::setRecordFilterStrategy);
 		map.from(this.replyTemplate).to(factory::setReplyTemplate);
 		if (properties.getType().equals(Listener.Type.BATCH)) {
@@ -174,6 +210,8 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 		map.from(this.afterRollbackProcessor).to(factory::setAfterRollbackProcessor);
 		map.from(this.recordInterceptor).to(factory::setRecordInterceptor);
 		map.from(this.batchInterceptor).to(factory::setBatchInterceptor);
+		map.from(this.threadNameSupplier).to(factory::setThreadNameSupplier);
+		map.from(properties::getChangeConsumerThreadName).to(factory::setChangeConsumerThreadName);
 	}
 
 	private void configureContainer(ContainerProperties container) {
@@ -198,8 +236,10 @@ public class ConcurrentKafkaListenerContainerFactoryConfigurer {
 		map.from(properties::getLogContainerConfig).to(container::setLogContainerConfig);
 		map.from(properties::isMissingTopicsFatal).to(container::setMissingTopicsFatal);
 		map.from(properties::isImmediateStop).to(container::setStopImmediate);
-		map.from(this.transactionManager).to(container::setTransactionManager);
+		map.from(properties::isObservationEnabled).to(container::setObservationEnabled);
+		map.from(this.transactionManager).to(container::setKafkaAwareTransactionManager);
 		map.from(this.rebalanceListener).to(container::setConsumerRebalanceListener);
+		map.from(this.listenerTaskExecutor).to(container::setListenerTaskExecutor);
 	}
 
 }

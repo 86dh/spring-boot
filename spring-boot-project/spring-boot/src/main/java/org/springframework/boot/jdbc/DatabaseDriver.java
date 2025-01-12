@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,11 @@
 
 package org.springframework.boot.jdbc;
 
-import java.sql.DatabaseMetaData;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
 
-import javax.sql.DataSource;
-
-import org.springframework.jdbc.support.JdbcUtils;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -98,10 +94,12 @@ public enum DatabaseDriver {
 	 * @since 2.1.0
 	 */
 	HANA("HDB", "com.sap.db.jdbc.Driver", "com.sap.db.jdbcext.XADataSourceSAP", "SELECT 1 FROM SYS.DUMMY") {
+
 		@Override
 		protected Collection<String> getUrlPrefixes() {
 			return Collections.singleton("sap");
 		}
+
 	},
 
 	/**
@@ -207,6 +205,19 @@ public enum DatabaseDriver {
 			return Collections.singleton("tc");
 		}
 
+	},
+
+	/**
+	 * ClickHouse.
+	 * @since 3.4.0
+	 */
+	CLICKHOUSE("ClickHouse", "com.clickhouse.jdbc.ClickHouseDriver", null, "SELECT 1") {
+
+		@Override
+		protected Collection<String> getUrlPrefixes() {
+			return Arrays.asList("ch", "clickhouse");
+		}
+
 	};
 
 	private final String productName;
@@ -240,12 +251,16 @@ public enum DatabaseDriver {
 		return name().toLowerCase(Locale.ENGLISH);
 	}
 
-	protected boolean matchProductName(String productName) {
-		return this.productName != null && this.productName.equalsIgnoreCase(productName);
-	}
-
+	/**
+	 * Return the url prefixes of this driver.
+	 * @return the url prefixes
+	 */
 	protected Collection<String> getUrlPrefixes() {
 		return Collections.singleton(name().toLowerCase(Locale.ENGLISH));
+	}
+
+	protected boolean matchProductName(String productName) {
+		return this.productName != null && this.productName.equalsIgnoreCase(productName);
 	}
 
 	/**
@@ -279,7 +294,7 @@ public enum DatabaseDriver {
 	 */
 	public static DatabaseDriver fromJdbcUrl(String url) {
 		if (StringUtils.hasLength(url)) {
-			Assert.isTrue(url.startsWith("jdbc"), "URL must start with 'jdbc'");
+			Assert.isTrue(url.startsWith("jdbc"), "'url' must start with \"jdbc\"");
 			String urlWithoutPrefix = url.substring("jdbc".length()).toLowerCase(Locale.ENGLISH);
 			for (DatabaseDriver driver : values()) {
 				for (String urlPrefix : driver.getUrlPrefixes()) {
@@ -307,23 +322,6 @@ public enum DatabaseDriver {
 			}
 		}
 		return UNKNOWN;
-	}
-
-	/**
-	 * Find a {@link DatabaseDriver} for the given {@code DataSource}.
-	 * @param dataSource data source to inspect
-	 * @return the database driver of {@link #UNKNOWN} if not found
-	 * @since 2.6.0
-	 */
-	public static DatabaseDriver fromDataSource(DataSource dataSource) {
-		try {
-			String productName = JdbcUtils.commonDatabaseName(
-					JdbcUtils.extractDatabaseMetaData(dataSource, DatabaseMetaData::getDatabaseProductName));
-			return DatabaseDriver.fromProductName(productName);
-		}
-		catch (Exception ex) {
-			return DatabaseDriver.UNKNOWN;
-		}
 	}
 
 }

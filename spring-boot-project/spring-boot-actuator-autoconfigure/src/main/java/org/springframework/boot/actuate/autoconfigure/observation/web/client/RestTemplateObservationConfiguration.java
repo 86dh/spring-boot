@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,8 @@ package org.springframework.boot.actuate.autoconfigure.observation.web.client;
 import io.micrometer.observation.ObservationRegistry;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.actuate.autoconfigure.metrics.MetricsProperties;
 import org.springframework.boot.actuate.autoconfigure.observation.ObservationProperties;
 import org.springframework.boot.actuate.metrics.web.client.ObservationRestTemplateCustomizer;
-import org.springframework.boot.actuate.metrics.web.client.RestTemplateExchangeTagsProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -40,39 +38,16 @@ import org.springframework.web.client.RestTemplate;
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(RestTemplate.class)
 @ConditionalOnBean(RestTemplateBuilder.class)
-@SuppressWarnings("removal")
 class RestTemplateObservationConfiguration {
 
 	@Bean
 	ObservationRestTemplateCustomizer observationRestTemplateCustomizer(ObservationRegistry observationRegistry,
 			ObjectProvider<ClientRequestObservationConvention> customConvention,
-			ObservationProperties observationProperties, MetricsProperties metricsProperties,
-			ObjectProvider<RestTemplateExchangeTagsProvider> optionalTagsProvider) {
-		String name = observationName(observationProperties, metricsProperties);
-		ClientRequestObservationConvention observationConvention = createConvention(customConvention.getIfAvailable(),
-				name, optionalTagsProvider.getIfAvailable());
+			ObservationProperties observationProperties) {
+		String name = observationProperties.getHttp().getClient().getRequests().getName();
+		ClientRequestObservationConvention observationConvention = customConvention
+			.getIfAvailable(() -> new DefaultClientRequestObservationConvention(name));
 		return new ObservationRestTemplateCustomizer(observationRegistry, observationConvention);
-	}
-
-	private static String observationName(ObservationProperties observationProperties,
-			MetricsProperties metricsProperties) {
-		String metricName = metricsProperties.getWeb().getClient().getRequest().getMetricName();
-		String observationName = observationProperties.getHttp().getClient().getRequests().getName();
-		return (observationName != null) ? observationName : metricName;
-	}
-
-	private static ClientRequestObservationConvention createConvention(
-			ClientRequestObservationConvention customConvention, String name,
-			RestTemplateExchangeTagsProvider tagsProvider) {
-		if (customConvention != null) {
-			return customConvention;
-		}
-		else if (tagsProvider != null) {
-			return new ClientHttpObservationConventionAdapter(name, tagsProvider);
-		}
-		else {
-			return new DefaultClientRequestObservationConvention(name);
-		}
 	}
 
 }

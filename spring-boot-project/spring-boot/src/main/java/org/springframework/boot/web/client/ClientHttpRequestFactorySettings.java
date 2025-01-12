@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package org.springframework.boot.web.client;
 
 import java.time.Duration;
 
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.ssl.SslBundle;
 import org.springframework.http.client.ClientHttpRequestFactory;
 
 /**
@@ -25,14 +27,17 @@ import org.springframework.http.client.ClientHttpRequestFactory;
  *
  * @param connectTimeout the connect timeout
  * @param readTimeout the read timeout
- * @param bufferRequestBody if request body buffering is used
+ * @param sslBundle the SSL bundle providing SSL configuration
  * @author Andy Wilkinson
  * @author Phillip Webb
+ * @author Scott Frederick
  * @since 3.0.0
- * @see ClientHttpRequestFactories
+ * @see ClientHttpRequestFactoryBuilder
+ * @deprecated since 3.4.0 for removal in 3.6.0 in favor of
+ * {@link org.springframework.boot.http.client.ClientHttpRequestFactorySettings}
  */
-public record ClientHttpRequestFactorySettings(Duration connectTimeout, Duration readTimeout,
-		Boolean bufferRequestBody) {
+@Deprecated(since = "3.4.0", forRemoval = true)
+public record ClientHttpRequestFactorySettings(Duration connectTimeout, Duration readTimeout, SslBundle sslBundle) {
 
 	/**
 	 * Use defaults for the {@link ClientHttpRequestFactory} which can differ depending on
@@ -43,12 +48,12 @@ public record ClientHttpRequestFactorySettings(Duration connectTimeout, Duration
 
 	/**
 	 * Return a new {@link ClientHttpRequestFactorySettings} instance with an updated
-	 * connect timeout setting .
+	 * connect timeout setting.
 	 * @param connectTimeout the new connect timeout setting
 	 * @return a new {@link ClientHttpRequestFactorySettings} instance
 	 */
 	public ClientHttpRequestFactorySettings withConnectTimeout(Duration connectTimeout) {
-		return new ClientHttpRequestFactorySettings(connectTimeout, this.readTimeout, this.bufferRequestBody);
+		return new ClientHttpRequestFactorySettings(connectTimeout, this.readTimeout, this.sslBundle);
 	}
 
 	/**
@@ -59,17 +64,29 @@ public record ClientHttpRequestFactorySettings(Duration connectTimeout, Duration
 	 */
 
 	public ClientHttpRequestFactorySettings withReadTimeout(Duration readTimeout) {
-		return new ClientHttpRequestFactorySettings(this.connectTimeout, readTimeout, this.bufferRequestBody);
+		return new ClientHttpRequestFactorySettings(this.connectTimeout, readTimeout, this.sslBundle);
 	}
 
 	/**
-	 * Return a new {@link ClientHttpRequestFactorySettings} instance with an updated
-	 * buffer request body setting.
-	 * @param bufferRequestBody the new buffer request body setting
+	 * Return a new {@link ClientHttpRequestFactorySettings} instance with an updated SSL
+	 * bundle setting.
+	 * @param sslBundle the new SSL bundle setting
 	 * @return a new {@link ClientHttpRequestFactorySettings} instance
+	 * @since 3.1.0
 	 */
-	public ClientHttpRequestFactorySettings withBufferRequestBody(Boolean bufferRequestBody) {
-		return new ClientHttpRequestFactorySettings(this.connectTimeout, this.readTimeout, bufferRequestBody);
+	public ClientHttpRequestFactorySettings withSslBundle(SslBundle sslBundle) {
+		return new ClientHttpRequestFactorySettings(this.connectTimeout, this.readTimeout, sslBundle);
+	}
+
+	org.springframework.boot.http.client.ClientHttpRequestFactorySettings adapt() {
+		return new org.springframework.boot.http.client.ClientHttpRequestFactorySettings(null, connectTimeout(),
+				readTimeout(), sslBundle());
+	}
+
+	static ClientHttpRequestFactorySettings of(
+			org.springframework.boot.http.client.ClientHttpRequestFactorySettings settings) {
+		return new ClientHttpRequestFactorySettings(settings.connectTimeout(), settings.readTimeout(),
+				settings.sslBundle());
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.util.Map;
 
 import jakarta.servlet.Servlet;
 import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRegistration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.web.servlet.mock.MockServlet;
 
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -68,14 +69,16 @@ class ServletRegistrationBeanTests {
 
 	@Test
 	void failsWithDoubleRegistration() {
-		assertThatThrownBy(() -> {
-			ServletRegistrationBean<MockServlet> bean = new ServletRegistrationBean<>(this.servlet);
-			bean.setName("double-registration");
-			given(this.servletContext.addServlet(anyString(), any(Servlet.class))).willReturn(null);
-			bean.onStartup(this.servletContext);
-		}).isInstanceOf(IllegalStateException.class)
-			.hasMessage(
-					"Failed to register 'servlet double-registration' on the servlet context. Possibly already registered?");
+		assertThatIllegalStateException().isThrownBy(this::doubleRegistration)
+			.withMessage("Failed to register 'servlet double-registration' on "
+					+ "the servlet context. Possibly already registered?");
+	}
+
+	private void doubleRegistration() throws ServletException {
+		ServletRegistrationBean<MockServlet> bean = new ServletRegistrationBean<>(this.servlet);
+		bean.setName("double-registration");
+		given(this.servletContext.addServlet(anyString(), any(Servlet.class))).willReturn(null);
+		bean.onStartup(this.servletContext);
 	}
 
 	@Test
@@ -132,35 +135,35 @@ class ServletRegistrationBeanTests {
 	@Test
 	void setServletMustNotBeNull() {
 		ServletRegistrationBean<MockServlet> bean = new ServletRegistrationBean<>();
-		assertThatIllegalArgumentException().isThrownBy(() -> bean.onStartup(this.servletContext))
-			.withMessageContaining("Servlet must not be null");
+		assertThatIllegalStateException().isThrownBy(() -> bean.onStartup(this.servletContext))
+			.withMessageContaining("Unable to return description for null servlet");
 	}
 
 	@Test
 	void createServletMustNotBeNull() {
 		assertThatIllegalArgumentException().isThrownBy(() -> new ServletRegistrationBean<MockServlet>(null))
-			.withMessageContaining("Servlet must not be null");
+			.withMessageContaining("'servlet' must not be null");
 	}
 
 	@Test
 	void setMappingMustNotBeNull() {
 		ServletRegistrationBean<MockServlet> bean = new ServletRegistrationBean<>(this.servlet);
 		assertThatIllegalArgumentException().isThrownBy(() -> bean.setUrlMappings(null))
-			.withMessageContaining("UrlMappings must not be null");
+			.withMessageContaining("'urlMappings' must not be null");
 	}
 
 	@Test
 	void createMappingMustNotBeNull() {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> new ServletRegistrationBean<>(this.servlet, (String[]) null))
-			.withMessageContaining("UrlMappings must not be null");
+			.withMessageContaining("'urlMappings' must not be null");
 	}
 
 	@Test
 	void addMappingMustNotBeNull() {
 		ServletRegistrationBean<MockServlet> bean = new ServletRegistrationBean<>(this.servlet);
 		assertThatIllegalArgumentException().isThrownBy(() -> bean.addUrlMappings((String[]) null))
-			.withMessageContaining("UrlMappings must not be null");
+			.withMessageContaining("'urlMappings' must not be null");
 	}
 
 	@Test

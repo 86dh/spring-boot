@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,14 +31,12 @@ public class MyCustomObservation {
 	}
 
 	public void doSomething() {
-		// @formatter:off
 		Observation.createNotStarted("doSomething", this.observationRegistry)
-				.lowCardinalityKeyValue("locale", "en-US")
-				.highCardinalityKeyValue("userId", "42")
-				.observe(() -> {
-					// Execute business logic here
-				});
-		// @formatter:on
+			.lowCardinalityKeyValue("locale", "en-US")
+			.highCardinalityKeyValue("userId", "42")
+			.observe(() -> {
+				// Execute business logic here
+			});
 	}
 
 }

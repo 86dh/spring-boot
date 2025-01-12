@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ import org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConf
 import org.springframework.boot.autoconfigure.info.ProjectInfoAutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.reactive.ReactiveUserDetailsServiceAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.reactive.WebFluxAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.reactive.function.client.WebClientAutoConfiguration;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
@@ -61,6 +60,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.security.core.userdetails.MapReactiveUserDetailsService;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.WebFilterChainProxy;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -84,15 +85,18 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 	private static final String V3_JSON = ApiVersion.V3.getProducedMimeType().toString();
 
 	private final ReactiveWebApplicationContextRunner contextRunner = new ReactiveWebApplicationContextRunner()
-		.withConfiguration(AutoConfigurations.of(ReactiveSecurityAutoConfiguration.class,
-				ReactiveUserDetailsServiceAutoConfiguration.class, WebFluxAutoConfiguration.class,
-				JacksonAutoConfiguration.class, HttpMessageConvertersAutoConfiguration.class,
-				PropertyPlaceholderAutoConfiguration.class, WebClientCustomizerConfig.class,
-				WebClientAutoConfiguration.class, ManagementContextAutoConfiguration.class,
-				EndpointAutoConfiguration.class, WebEndpointAutoConfiguration.class,
-				HealthContributorAutoConfiguration.class, HealthEndpointAutoConfiguration.class,
-				InfoContributorAutoConfiguration.class, InfoEndpointAutoConfiguration.class,
-				ProjectInfoAutoConfiguration.class, ReactiveCloudFoundryActuatorAutoConfiguration.class));
+		.withConfiguration(
+				AutoConfigurations.of(ReactiveSecurityAutoConfiguration.class, WebFluxAutoConfiguration.class,
+						JacksonAutoConfiguration.class, HttpMessageConvertersAutoConfiguration.class,
+						PropertyPlaceholderAutoConfiguration.class, WebClientCustomizerConfig.class,
+						WebClientAutoConfiguration.class, ManagementContextAutoConfiguration.class,
+						EndpointAutoConfiguration.class, WebEndpointAutoConfiguration.class,
+						HealthContributorAutoConfiguration.class, HealthEndpointAutoConfiguration.class,
+						InfoContributorAutoConfiguration.class, InfoEndpointAutoConfiguration.class,
+						ProjectInfoAutoConfiguration.class, ReactiveCloudFoundryActuatorAutoConfiguration.class))
+		.withUserConfiguration(UserDetailsServiceConfiguration.class);
+
+	private static final String BASE_PATH = "/cloudfoundryapplication";
 
 	@AfterEach
 	void close() {
@@ -175,21 +179,24 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 	@Test
 	@SuppressWarnings("unchecked")
 	void cloudFoundryPathsIgnoredBySpringSecurity() {
-		this.contextRunner
+		this.contextRunner.withBean(TestEndpoint.class, TestEndpoint::new)
 			.withPropertyValues("VCAP_APPLICATION:---", "vcap.application.application_id:my-app-id",
 					"vcap.application.cf_api:https://my-cloud-controller.com")
 			.run((context) -> {
 				WebFilterChainProxy chainProxy = context.getBean(WebFilterChainProxy.class);
 				List<SecurityWebFilterChain> filters = (List<SecurityWebFilterChain>) ReflectionTestUtils
 					.getField(chainProxy, "filters");
-				Boolean cfRequestMatches = filters.get(0)
-					.matches(MockServerWebExchange
-						.from(MockServerHttpRequest.get("/cloudfoundryapplication/my-path").build()))
-					.block(Duration.ofSeconds(30));
-				Boolean otherRequestMatches = filters.get(0)
-					.matches(MockServerWebExchange.from(MockServerHttpRequest.get("/some-other-path").build()))
-					.block(Duration.ofSeconds(30));
+				Boolean cfBaseRequestMatches = getMatches(filters, BASE_PATH);
+				Boolean cfBaseWithTrailingSlashRequestMatches = getMatches(filters, BASE_PATH + "/");
+				Boolean cfRequestMatches = getMatches(filters, BASE_PATH + "/test");
+				Boolean cfRequestWithAdditionalPathMatches = getMatches(filters, BASE_PATH + "/test/a");
+				Boolean otherCfRequestMatches = getMatches(filters, BASE_PATH + "/other-path");
+				Boolean otherRequestMatches = getMatches(filters, "/some-other-path");
+				assertThat(cfBaseRequestMatches).isTrue();
+				assertThat(cfBaseWithTrailingSlashRequestMatches).isTrue();
 				assertThat(cfRequestMatches).isTrue();
+				assertThat(cfRequestWithAdditionalPathMatches).isTrue();
+				assertThat(otherCfRequestMatches).isFalse();
 				assertThat(otherRequestMatches).isFalse();
 				otherRequestMatches = filters.get(1)
 					.matches(MockServerWebExchange.from(MockServerHttpRequest.get("/some-other-path").build()))
@@ -197,6 +204,12 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 				assertThat(otherRequestMatches).isTrue();
 			});
 
+	}
+
+	private static Boolean getMatches(List<SecurityWebFilterChain> filters, String urlTemplate) {
+		return filters.get(0)
+			.matches(MockServerWebExchange.from(MockServerHttpRequest.get(urlTemplate).build()))
+			.block(Duration.ofSeconds(30));
 	}
 
 	@Test
@@ -282,12 +295,21 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 				Object interceptorSecurityService = ReflectionTestUtils.getField(interceptor,
 						"cloudFoundrySecurityService");
 				WebClient webClient = (WebClient) ReflectionTestUtils.getField(interceptorSecurityService, "webClient");
-				webClient.get()
+				doesNotFailWithSslException(() -> webClient.get()
 					.uri("https://self-signed.badssl.com/")
 					.retrieve()
 					.toBodilessEntity()
-					.block(Duration.ofSeconds(30));
+					.block(Duration.ofSeconds(30)));
 			});
+	}
+
+	private static void doesNotFailWithSslException(Runnable action) {
+		try {
+			action.run();
+		}
+		catch (RuntimeException ex) {
+			assertThat(findCause(ex, SSLException.class)).isNull();
+		}
 	}
 
 	@Test
@@ -327,6 +349,16 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 				"No operation found with request path " + requestPath + " from " + endpoint.getOperations());
 	}
 
+	private static <E extends Throwable> E findCause(Throwable failure, Class<E> type) {
+		while (failure != null) {
+			if (type.isInstance(failure)) {
+				return type.cast(failure);
+			}
+			failure = failure.getCause();
+		}
+		return null;
+	}
+
 	@Endpoint(id = "test")
 	static class TestEndpoint {
 
@@ -343,6 +375,17 @@ class ReactiveCloudFoundryActuatorAutoConfigurationTests {
 		@Bean
 		WebClientCustomizer webClientCustomizer() {
 			return mock(WebClientCustomizer.class);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class UserDetailsServiceConfiguration {
+
+		@Bean
+		MapReactiveUserDetailsService userDetailsService() {
+			return new MapReactiveUserDetailsService(
+					User.withUsername("alice").password("secret").roles("admin").build());
 		}
 
 	}

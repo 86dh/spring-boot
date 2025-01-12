@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 package org.springframework.boot.actuate.mongo;
+
+import java.time.Duration;
 
 import com.mongodb.MongoException;
 import org.bson.Document;
@@ -43,7 +45,7 @@ class MongoReactiveHealthIndicatorTests {
 		Document buildInfo = mock(Document.class);
 		given(buildInfo.getInteger("maxWireVersion")).willReturn(10);
 		ReactiveMongoTemplate reactiveMongoTemplate = mock(ReactiveMongoTemplate.class);
-		given(reactiveMongoTemplate.executeCommand("{ isMaster: 1 }")).willReturn(Mono.just(buildInfo));
+		given(reactiveMongoTemplate.executeCommand("{ hello: 1 }")).willReturn(Mono.just(buildInfo));
 		MongoReactiveHealthIndicator mongoReactiveHealthIndicator = new MongoReactiveHealthIndicator(
 				reactiveMongoTemplate);
 		Mono<Health> health = mongoReactiveHealthIndicator.health();
@@ -51,14 +53,13 @@ class MongoReactiveHealthIndicatorTests {
 			assertThat(h.getStatus()).isEqualTo(Status.UP);
 			assertThat(h.getDetails()).containsOnlyKeys("maxWireVersion");
 			assertThat(h.getDetails()).containsEntry("maxWireVersion", 10);
-		}).verifyComplete();
+		}).expectComplete().verify(Duration.ofSeconds(30));
 	}
 
 	@Test
 	void testMongoIsDown() {
 		ReactiveMongoTemplate reactiveMongoTemplate = mock(ReactiveMongoTemplate.class);
-		given(reactiveMongoTemplate.executeCommand("{ isMaster: 1 }"))
-			.willThrow(new MongoException("Connection failed"));
+		given(reactiveMongoTemplate.executeCommand("{ hello: 1 }")).willThrow(new MongoException("Connection failed"));
 		MongoReactiveHealthIndicator mongoReactiveHealthIndicator = new MongoReactiveHealthIndicator(
 				reactiveMongoTemplate);
 		Mono<Health> health = mongoReactiveHealthIndicator.health();
@@ -66,7 +67,7 @@ class MongoReactiveHealthIndicatorTests {
 			assertThat(h.getStatus()).isEqualTo(Status.DOWN);
 			assertThat(h.getDetails()).containsOnlyKeys("error");
 			assertThat(h.getDetails()).containsEntry("error", MongoException.class.getName() + ": Connection failed");
-		}).verifyComplete();
+		}).expectComplete().verify(Duration.ofSeconds(30));
 	}
 
 }
