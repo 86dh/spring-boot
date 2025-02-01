@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,18 @@ package org.springframework.boot.autoconfigure.data.redis;
 import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.testsupport.assertj.SimpleAsyncTaskExecutorAssert;
 import org.springframework.boot.testsupport.classpath.ClassPathExclusions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.jedis.JedisClientConfiguration.JedisClientConfigurationBuilder;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
@@ -39,12 +44,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Mark Paluch
  * @author Stephane Nicoll
  * @author Weix Sun
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Phillip Webb
+ * @author Scott Frederick
  */
 @ClassPathExclusions("lettuce-core-*.jar")
 class RedisAutoConfigurationJedisTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-		.withConfiguration(AutoConfigurations.of(RedisAutoConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(RedisAutoConfiguration.class, SslAutoConfiguration.class));
 
 	@Test
 	void connectionFactoryDefaultsToJedis() {
@@ -80,6 +89,14 @@ class RedisAutoConfigurationJedisTests {
 	}
 
 	@Test
+	void usesConnectionDetailsIfAvailable() {
+		this.contextRunner.withUserConfiguration(ConnectionDetailsConfiguration.class).run((context) -> {
+			JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
+			assertThat(cf.isUseSsl()).isFalse();
+		});
+	}
+
+	@Test
 	void testRedisUrlConfiguration() {
 		this.contextRunner
 			.withPropertyValues("spring.data.redis.host:foo", "spring.data.redis.url:redis://user:password@example:33")
@@ -97,7 +114,7 @@ class RedisAutoConfigurationJedisTests {
 	void testOverrideUrlRedisConfiguration() {
 		this.contextRunner
 			.withPropertyValues("spring.data.redis.host:foo", "spring.data.redis.password:xyz",
-					"spring.data.redis.port:1000", "spring.data.redis.ssl:false",
+					"spring.data.redis.port:1000", "spring.data.redis.ssl.enabled:false",
 					"spring.data.redis.url:rediss://user:password@example:33")
 			.run((context) -> {
 				JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
@@ -139,14 +156,17 @@ class RedisAutoConfigurationJedisTests {
 					"spring.data.redis.jedis.pool.max-idle:4", "spring.data.redis.jedis.pool.max-active:16",
 					"spring.data.redis.jedis.pool.max-wait:2000",
 					"spring.data.redis.jedis.pool.time-between-eviction-runs:30000")
+			.withUserConfiguration(JedisDisableStartupConfiguration.class)
 			.run((context) -> {
 				JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
 				assertThat(cf.getHostName()).isEqualTo("foo");
-				assertThat(cf.getPoolConfig().getMinIdle()).isOne();
-				assertThat(cf.getPoolConfig().getMaxIdle()).isEqualTo(4);
-				assertThat(cf.getPoolConfig().getMaxTotal()).isEqualTo(16);
-				assertThat(cf.getPoolConfig().getMaxWaitDuration()).isEqualTo(Duration.ofSeconds(2));
-				assertThat(cf.getPoolConfig().getDurationBetweenEvictionRuns()).isEqualTo(Duration.ofSeconds(30));
+				assertThat(cf.getPoolConfig()).satisfies((poolConfig) -> {
+					assertThat(poolConfig.getMinIdle()).isOne();
+					assertThat(poolConfig.getMaxIdle()).isEqualTo(4);
+					assertThat(poolConfig.getMaxTotal()).isEqualTo(16);
+					assertThat(poolConfig.getMaxWaitDuration()).isEqualTo(Duration.ofSeconds(2));
+					assertThat(poolConfig.getDurationBetweenEvictionRuns()).isEqualTo(Duration.ofSeconds(30));
+				});
 			});
 	}
 
@@ -226,6 +246,56 @@ class RedisAutoConfigurationJedisTests {
 				.isTrue());
 	}
 
+	@Test
+	void testRedisConfigurationWithSslEnabled() {
+		this.contextRunner.withPropertyValues("spring.data.redis.ssl.enabled:true").run((context) -> {
+			JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
+			assertThat(cf.isUseSsl()).isTrue();
+		});
+	}
+
+	@Test
+	void testRedisConfigurationWithSslBundle() {
+		this.contextRunner
+			.withPropertyValues("spring.data.redis.ssl.bundle:test-bundle",
+					"spring.ssl.bundle.jks.test-bundle.keystore.location:classpath:test.jks",
+					"spring.ssl.bundle.jks.test-bundle.keystore.password:secret",
+					"spring.ssl.bundle.jks.test-bundle.key.password:password")
+			.run((context) -> {
+				JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
+				assertThat(cf.isUseSsl()).isTrue();
+			});
+	}
+
+	@Test
+	void testRedisConfigurationWithSslDisabledAndBundle() {
+		this.contextRunner
+			.withPropertyValues("spring.data.redis.ssl.enabled:false", "spring.data.redis.ssl.bundle:test-bundle")
+			.run((context) -> {
+				JedisConnectionFactory cf = context.getBean(JedisConnectionFactory.class);
+				assertThat(cf.isUseSsl()).isFalse();
+			});
+	}
+
+	@Test
+	void shouldUsePlatformThreadsByDefault() {
+		this.contextRunner.run((context) -> {
+			JedisConnectionFactory factory = context.getBean(JedisConnectionFactory.class);
+			assertThat(factory).extracting("executor").isNull();
+		});
+	}
+
+	@Test
+	@EnabledForJreRange(min = JRE.JAVA_21)
+	void shouldUseVirtualThreadsIfEnabled() {
+		this.contextRunner.withPropertyValues("spring.threads.virtual.enabled=true").run((context) -> {
+			JedisConnectionFactory factory = context.getBean(JedisConnectionFactory.class);
+			assertThat(factory).extracting("executor")
+				.satisfies((executor) -> SimpleAsyncTaskExecutorAssert.assertThat((SimpleAsyncTaskExecutor) executor)
+					.usesVirtualThreads());
+		});
+	}
+
 	private String getUserName(JedisConnectionFactory factory) {
 		return ReflectionTestUtils.invokeMethod(factory, "getRedisUsername");
 	}
@@ -241,10 +311,39 @@ class RedisAutoConfigurationJedisTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
+	static class ConnectionDetailsConfiguration {
+
+		@Bean
+		RedisConnectionDetails redisConnectionDetails() {
+			return new RedisConnectionDetails() {
+
+				@Override
+				public Standalone getStandalone() {
+					return new Standalone() {
+
+						@Override
+						public String getHost() {
+							return "localhost";
+						}
+
+						@Override
+						public int getPort() {
+							return 6379;
+						}
+
+					};
+				}
+
+			};
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
 	static class JedisConnectionFactoryCaptorConfiguration {
 
 		@Bean
-		JedisConnectionFactoryCaptor jedisConnectionFactoryCaptor() {
+		static JedisConnectionFactoryCaptor jedisConnectionFactoryCaptor() {
 			return new JedisConnectionFactoryCaptor();
 		}
 
@@ -260,6 +359,27 @@ class RedisAutoConfigurationJedisTests {
 				connectionFactory = jedisConnectionFactory;
 			}
 			return bean;
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class JedisDisableStartupConfiguration {
+
+		@Bean
+		static BeanPostProcessor jedisDisableStartup() {
+			return new BeanPostProcessor() {
+
+				@Override
+				public Object postProcessBeforeInitialization(Object bean, String beanName) {
+					if (bean instanceof JedisConnectionFactory jedisConnectionFactory) {
+						jedisConnectionFactory.setEarlyStartup(false);
+						jedisConnectionFactory.setAutoStartup(false);
+					}
+					return bean;
+				}
+
+			};
 		}
 
 	}

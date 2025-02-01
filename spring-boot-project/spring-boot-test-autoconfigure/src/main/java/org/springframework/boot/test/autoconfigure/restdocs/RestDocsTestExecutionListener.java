@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,9 @@ import org.springframework.util.ClassUtils;
  */
 public class RestDocsTestExecutionListener extends AbstractTestExecutionListener {
 
-	private static final String REST_DOCS_CLASS = "org.springframework.restdocs.ManualRestDocumentation";
+	private static final boolean REST_DOCS_PRESENT = ClassUtils.isPresent(
+			"org.springframework.restdocs.ManualRestDocumentation",
+			RestDocsTestExecutionListener.class.getClassLoader());
 
 	@Override
 	public int getOrder() {
@@ -42,23 +44,19 @@ public class RestDocsTestExecutionListener extends AbstractTestExecutionListener
 
 	@Override
 	public void beforeTestMethod(TestContext testContext) throws Exception {
-		if (restDocsIsPresent()) {
+		if (REST_DOCS_PRESENT) {
 			new DocumentationHandler().beforeTestMethod(testContext);
 		}
 	}
 
 	@Override
 	public void afterTestMethod(TestContext testContext) throws Exception {
-		if (restDocsIsPresent()) {
+		if (REST_DOCS_PRESENT) {
 			new DocumentationHandler().afterTestMethod(testContext);
 		}
 	}
 
-	private boolean restDocsIsPresent() {
-		return ClassUtils.isPresent(REST_DOCS_CLASS, getClass().getClassLoader());
-	}
-
-	private static class DocumentationHandler {
+	private static final class DocumentationHandler {
 
 		private void beforeTestMethod(TestContext testContext) {
 			ManualRestDocumentation restDocumentation = findManualRestDocumentation(testContext);

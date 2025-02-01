@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,11 +33,12 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -59,21 +60,6 @@ import org.springframework.core.io.ResourceLoader;
  * <li>{@link org.springframework.amqp.core.AmqpAdmin } instance as long as
  * {@literal spring.rabbitmq.dynamic=true}.</li>
  * </ul>
- * <p>
- * The {@link org.springframework.amqp.rabbit.connection.CachingConnectionFactory} honors
- * the following properties:
- * <ul>
- * <li>{@literal spring.rabbitmq.port} is used to specify the port to which the client
- * should connect, and defaults to 5672.</li>
- * <li>{@literal spring.rabbitmq.username} is used to specify the (optional) username.
- * </li>
- * <li>{@literal spring.rabbitmq.password} is used to specify the (optional) password.
- * </li>
- * <li>{@literal spring.rabbitmq.host} is used to specify the host, and defaults to
- * {@literal localhost}.</li>
- * <li>{@literal spring.rabbitmq.virtualHost} is used to specify the (optional) virtual
- * host to which the client should connect.</li>
- * </ul>
  *
  * @author Greg Turnquist
  * @author Josh Long
@@ -82,6 +68,9 @@ import org.springframework.core.io.ResourceLoader;
  * @author Phillip Webb
  * @author Artsiom Yudovin
  * @author Chris Bono
+ * @author Moritz Halbritter
+ * @author Andy Wilkinson
+ * @author Scott Frederick
  * @since 1.0.0
  */
 @AutoConfiguration
@@ -93,13 +82,26 @@ public class RabbitAutoConfiguration {
 	@Configuration(proxyBeanMethods = false)
 	protected static class RabbitConnectionFactoryCreator {
 
+		private final RabbitProperties properties;
+
+		protected RabbitConnectionFactoryCreator(RabbitProperties properties) {
+			this.properties = properties;
+		}
+
 		@Bean
 		@ConditionalOnMissingBean
-		RabbitConnectionFactoryBeanConfigurer rabbitConnectionFactoryBeanConfigurer(RabbitProperties properties,
-				ResourceLoader resourceLoader, ObjectProvider<CredentialsProvider> credentialsProvider,
-				ObjectProvider<CredentialsRefreshService> credentialsRefreshService) {
+		RabbitConnectionDetails rabbitConnectionDetails() {
+			return new PropertiesRabbitConnectionDetails(this.properties);
+		}
+
+		@Bean
+		@ConditionalOnMissingBean
+		RabbitConnectionFactoryBeanConfigurer rabbitConnectionFactoryBeanConfigurer(ResourceLoader resourceLoader,
+				RabbitConnectionDetails connectionDetails, ObjectProvider<CredentialsProvider> credentialsProvider,
+				ObjectProvider<CredentialsRefreshService> credentialsRefreshService,
+				ObjectProvider<SslBundles> sslBundles) {
 			RabbitConnectionFactoryBeanConfigurer configurer = new RabbitConnectionFactoryBeanConfigurer(resourceLoader,
-					properties);
+					this.properties, connectionDetails, sslBundles.getIfAvailable());
 			configurer.setCredentialsProvider(credentialsProvider.getIfUnique());
 			configurer.setCredentialsRefreshService(credentialsRefreshService.getIfUnique());
 			return configurer;
@@ -107,9 +109,10 @@ public class RabbitAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean
-		CachingConnectionFactoryConfigurer rabbitConnectionFactoryConfigurer(RabbitProperties rabbitProperties,
+		CachingConnectionFactoryConfigurer rabbitConnectionFactoryConfigurer(RabbitConnectionDetails connectionDetails,
 				ObjectProvider<ConnectionNameStrategy> connectionNameStrategy) {
-			CachingConnectionFactoryConfigurer configurer = new CachingConnectionFactoryConfigurer(rabbitProperties);
+			CachingConnectionFactoryConfigurer configurer = new CachingConnectionFactoryConfigurer(this.properties,
+					connectionDetails);
 			configurer.setConnectionNameStrategy(connectionNameStrategy.getIfUnique());
 			return configurer;
 		}
@@ -120,17 +123,14 @@ public class RabbitAutoConfiguration {
 				RabbitConnectionFactoryBeanConfigurer rabbitConnectionFactoryBeanConfigurer,
 				CachingConnectionFactoryConfigurer rabbitCachingConnectionFactoryConfigurer,
 				ObjectProvider<ConnectionFactoryCustomizer> connectionFactoryCustomizers) throws Exception {
-
-			RabbitConnectionFactoryBean connectionFactoryBean = new RabbitConnectionFactoryBean();
+			RabbitConnectionFactoryBean connectionFactoryBean = new SslBundleRabbitConnectionFactoryBean();
 			rabbitConnectionFactoryBeanConfigurer.configure(connectionFactoryBean);
 			connectionFactoryBean.afterPropertiesSet();
 			com.rabbitmq.client.ConnectionFactory connectionFactory = connectionFactoryBean.getObject();
 			connectionFactoryCustomizers.orderedStream()
 				.forEach((customizer) -> customizer.customize(connectionFactory));
-
 			CachingConnectionFactory factory = new CachingConnectionFactory(connectionFactory);
 			rabbitCachingConnectionFactoryConfigurer.configure(factory);
-
 			return factory;
 		}
 
@@ -154,15 +154,17 @@ public class RabbitAutoConfiguration {
 		@Bean
 		@ConditionalOnSingleCandidate(ConnectionFactory.class)
 		@ConditionalOnMissingBean(RabbitOperations.class)
-		public RabbitTemplate rabbitTemplate(RabbitTemplateConfigurer configurer, ConnectionFactory connectionFactory) {
+		public RabbitTemplate rabbitTemplate(RabbitTemplateConfigurer configurer, ConnectionFactory connectionFactory,
+				ObjectProvider<RabbitTemplateCustomizer> customizers) {
 			RabbitTemplate template = new RabbitTemplate();
 			configurer.configure(template, connectionFactory);
+			customizers.orderedStream().forEach((customizer) -> customizer.customize(template));
 			return template;
 		}
 
 		@Bean
 		@ConditionalOnSingleCandidate(ConnectionFactory.class)
-		@ConditionalOnProperty(prefix = "spring.rabbitmq", name = "dynamic", matchIfMissing = true)
+		@ConditionalOnBooleanProperty(name = "spring.rabbitmq.dynamic", matchIfMissing = true)
 		@ConditionalOnMissingBean
 		public AmqpAdmin amqpAdmin(ConnectionFactory connectionFactory) {
 			return new RabbitAdmin(connectionFactory);
@@ -174,7 +176,7 @@ public class RabbitAutoConfiguration {
 	@ConditionalOnClass(RabbitMessagingTemplate.class)
 	@ConditionalOnMissingBean(RabbitMessagingTemplate.class)
 	@Import(RabbitTemplateConfiguration.class)
-	protected static class MessagingTemplateConfiguration {
+	protected static class RabbitMessagingTemplateConfiguration {
 
 		@Bean
 		@ConditionalOnSingleCandidate(RabbitTemplate.class)

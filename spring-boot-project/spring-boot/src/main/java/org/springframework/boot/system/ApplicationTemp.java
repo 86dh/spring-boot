@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,10 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.util.EnumSet;
 import java.util.HexFormat;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
+import org.springframework.core.NativeDetector;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -48,6 +51,8 @@ public class ApplicationTemp {
 			PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE);
 
 	private final Class<?> sourceClass;
+
+	private final Lock pathLock = new ReentrantLock();
 
 	private volatile Path path;
 
@@ -90,9 +95,15 @@ public class ApplicationTemp {
 
 	private Path getPath() {
 		if (this.path == null) {
-			synchronized (this) {
-				String hash = HexFormat.of().withUpperCase().formatHex(generateHash(this.sourceClass));
-				this.path = createDirectory(getTempDirectory().resolve(hash));
+			this.pathLock.lock();
+			try {
+				if (this.path == null) {
+					String hash = HexFormat.of().withUpperCase().formatHex(generateHash(this.sourceClass));
+					this.path = createDirectory(getTempDirectory().resolve(hash));
+				}
+			}
+			finally {
+				this.pathLock.unlock();
 			}
 		}
 		return this.path;
@@ -135,7 +146,9 @@ public class ApplicationTemp {
 			update(digest, home.getSource());
 			update(digest, home.getDir());
 			update(digest, System.getProperty("user.dir"));
-			update(digest, System.getProperty("java.home"));
+			if (!NativeDetector.inNativeImage()) {
+				update(digest, System.getProperty("java.home"));
+			}
 			update(digest, System.getProperty("java.class.path"));
 			update(digest, System.getProperty("sun.java.command"));
 			update(digest, System.getProperty("sun.boot.class.path"));

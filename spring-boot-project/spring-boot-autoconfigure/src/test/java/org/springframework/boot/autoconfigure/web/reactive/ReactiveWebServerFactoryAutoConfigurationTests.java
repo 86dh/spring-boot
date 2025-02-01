@@ -26,10 +26,11 @@ import org.junit.jupiter.api.Test;
 import reactor.netty.http.server.HttpServer;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
+import org.springframework.boot.ssl.NoSuchSslBundleException;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 import org.springframework.boot.testsupport.web.servlet.DirtiesUrlFactories;
-import org.springframework.boot.testsupport.web.servlet.Servlet5ClassPathOverrides;
 import org.springframework.boot.web.embedded.jetty.JettyReactiveWebServerFactory;
 import org.springframework.boot.web.embedded.jetty.JettyServerCustomizer;
 import org.springframework.boot.web.embedded.netty.NettyReactiveWebServerFactory;
@@ -64,13 +65,15 @@ import static org.mockito.Mockito.mock;
  * @author Brian Clozel
  * @author Raheela Aslam
  * @author Madhura Bhave
+ * @author Scott Frederick
  */
 @DirtiesUrlFactories
 class ReactiveWebServerFactoryAutoConfigurationTests {
 
 	private final ReactiveWebApplicationContextRunner contextRunner = new ReactiveWebApplicationContextRunner(
 			AnnotationConfigReactiveWebServerApplicationContext::new)
-		.withConfiguration(AutoConfigurations.of(ReactiveWebServerFactoryAutoConfiguration.class));
+		.withConfiguration(
+				AutoConfigurations.of(ReactiveWebServerFactoryAutoConfiguration.class, SslAutoConfiguration.class));
 
 	@Test
 	void createFromConfigClass() {
@@ -116,6 +119,17 @@ class ReactiveWebServerFactoryAutoConfigurationTests {
 			.withPropertyValues("server.port=0")
 			.run((context) -> assertThat(context.getBean(ReactiveWebServerFactory.class))
 				.isInstanceOf(TomcatReactiveWebServerFactory.class));
+	}
+
+	@Test
+	void webServerFailsWithInvalidSslBundle() {
+		this.contextRunner.withUserConfiguration(HttpHandlerConfiguration.class)
+			.withPropertyValues("server.port=0", "server.ssl.bundle=test-bundle")
+			.run((context) -> {
+				assertThat(context).hasFailed();
+				assertThat(context.getStartupFailure().getCause()).isInstanceOf(NoSuchSslBundleException.class)
+					.withFailMessage("test");
+			});
 	}
 
 	@Test
@@ -216,7 +230,6 @@ class ReactiveWebServerFactoryAutoConfigurationTests {
 	}
 
 	@Test
-	@Servlet5ClassPathOverrides
 	void jettyServerCustomizerBeanIsAddedToFactory() {
 		new ReactiveWebApplicationContextRunner(AnnotationConfigReactiveWebApplicationContext::new)
 			.withConfiguration(AutoConfigurations.of(ReactiveWebServerFactoryAutoConfiguration.class))
@@ -229,7 +242,6 @@ class ReactiveWebServerFactoryAutoConfigurationTests {
 	}
 
 	@Test
-	@Servlet5ClassPathOverrides
 	void jettyServerCustomizerRegisteredAsBeanAndViaFactoryIsOnlyCalledOnce() {
 		new ReactiveWebApplicationContextRunner(AnnotationConfigReactiveWebServerApplicationContext::new)
 			.withConfiguration(AutoConfigurations.of(ReactiveWebServerFactoryAutoConfiguration.class))

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import org.springframework.boot.configurationmetadata.SimpleConfigurationMetadat
 import org.springframework.boot.env.PropertiesPropertySourceLoader;
 import org.springframework.boot.origin.Origin;
 import org.springframework.boot.origin.OriginLookup;
+import org.springframework.boot.origin.PropertySourceOrigin;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
@@ -85,6 +86,13 @@ class PropertiesMigrationReporterTests {
 				"Line: 8", "Replacement: custom.the-map-replacement.key", "wrong.four.test", "Line: 5",
 				"test.four.test", "wrong.two", "Line: 2", "test.two");
 		assertThat(report).doesNotContain("wrong.one");
+	}
+
+	@Test
+	void warningReportReplacedWithSameRelaxedName() throws IOException {
+		this.environment.getPropertySources().addFirst(loadPropertySource("test", "config/config-relaxed.properties"));
+		String report = createWarningReport(loadRepository("metadata/sample-metadata.json"));
+		assertThat(report).isNull();
 	}
 
 	@Test
@@ -162,7 +170,7 @@ class PropertiesMigrationReporterTests {
 	}
 
 	@Test
-	void mapPropertiesDeprecatedNoReplacement() throws IOException {
+	void mapPropertiesDeprecatedNoReplacement() {
 		this.environment.getPropertySources()
 			.addFirst(
 					new MapPropertySource("first", Collections.singletonMap("custom.map-no-replacement.key", "value")));
@@ -173,7 +181,7 @@ class PropertiesMigrationReporterTests {
 	}
 
 	@Test
-	void mapPropertiesDeprecatedWithReplacement() throws IOException {
+	void mapPropertiesDeprecatedWithReplacement() {
 		this.environment.getPropertySources()
 			.addFirst(new MapPropertySource("first",
 					Collections.singletonMap("custom.map-with-replacement.key", "value")));
@@ -205,6 +213,14 @@ class PropertiesMigrationReporterTests {
 			.contains("Replacement: custom.the-map-replacement.key");
 	}
 
+	@Test // gh-35919
+	void directCircularReference() {
+		this.environment.getPropertySources()
+			.addFirst(new MapPropertySource("backcompat", Collections.singletonMap("wrong.two", "${test.two}")));
+		createAnalyzer(loadRepository("metadata/sample-metadata.json")).getReport();
+		assertThat(this.environment.getProperty("test.two")).isNull();
+	}
+
 	private List<String> mapToNames(PropertySources sources) {
 		List<String> names = new ArrayList<>();
 		for (PropertySource<?> source : sources) {
@@ -224,7 +240,11 @@ class PropertiesMigrationReporterTests {
 		assertThat(propertySource.getProperty(name)).isEqualTo(value);
 		if (origin != null) {
 			assertThat(propertySource).isInstanceOf(OriginLookup.class);
-			assertThat(((OriginLookup<Object>) propertySource).getOrigin(name)).isEqualTo(origin);
+			Origin actualOrigin = ((OriginLookup<Object>) propertySource).getOrigin(name);
+			if (actualOrigin instanceof PropertySourceOrigin propertySourceOrigin) {
+				actualOrigin = propertySourceOrigin.getOrigin();
+			}
+			assertThat(actualOrigin).isEqualTo(origin);
 		}
 	}
 

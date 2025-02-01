@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.springframework.boot.buildpack.platform.docker.type;
 
 import java.io.File;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,12 +29,13 @@ import org.springframework.util.ObjectUtils;
  *
  * @author Phillip Webb
  * @author Scott Frederick
+ * @author Moritz Halbritter
  * @since 2.3.0
  * @see ImageName
  */
 public final class ImageReference {
 
-	private static final Pattern JAR_VERSION_PATTERN = Pattern.compile("^(.*)(\\-\\d+)$");
+	private static final Pattern JAR_VERSION_PATTERN = Pattern.compile("^(.*)(-\\d+)$");
 
 	private static final String LATEST = "latest";
 
@@ -46,7 +48,7 @@ public final class ImageReference {
 	private final String string;
 
 	private ImageReference(ImageName name, String tag, String digest) {
-		Assert.notNull(name, "Name must not be null");
+		Assert.notNull(name, "'name' must not be null");
 		this.name = name;
 		this.tag = tag;
 		this.digest = digest;
@@ -154,6 +156,18 @@ public final class ImageReference {
 	}
 
 	/**
+	 * Return an {@link ImageReference} without the tag.
+	 * @return the image reference in tagless form
+	 * @since 2.7.12
+	 */
+	public ImageReference inTaglessForm() {
+		if (this.tag == null) {
+			return this;
+		}
+		return new ImageReference(this.name, null, this.digest);
+	}
+
+	/**
 	 * Return an {@link ImageReference} containing either a tag or a digest. If neither
 	 * the digest nor the tag has been defined then tag {@code latest} is used.
 	 * @return the image reference in tagged or digest form
@@ -172,8 +186,10 @@ public final class ImageReference {
 	 * @return an {@link ImageName} for the jar file.
 	 */
 	public static ImageReference forJarFile(File jarFile) {
+		Assert.notNull(jarFile, "'jarFile' must not be null");
 		String filename = jarFile.getName();
-		Assert.isTrue(filename.toLowerCase().endsWith(".jar"), () -> "File '" + jarFile + "' is not a JAR");
+		Assert.isTrue(filename.toLowerCase(Locale.ROOT).endsWith(".jar"),
+				() -> "'jarFile' must end with '.jar' [" + jarFile + "]");
 		filename = filename.substring(0, filename.length() - 4);
 		int firstDot = filename.indexOf('.');
 		if (firstDot == -1) {
@@ -222,7 +238,7 @@ public final class ImageReference {
 	 * @return an {@link ImageName} instance
 	 */
 	public static ImageReference of(String value) {
-		Assert.hasText(value, "Value must not be null");
+		Assert.hasText(value, "'value' must not be null");
 		String domain = ImageName.parseDomain(value);
 		String path = (domain != null) ? value.substring(domain.length() + 1) : value;
 		String digest = null;
@@ -247,12 +263,20 @@ public final class ImageReference {
 				path = path.substring(0, tagSplit) + remainder;
 			}
 		}
-		Assert.isTrue(Regex.PATH.matcher(path).matches(),
-				() -> "Unable to parse image reference \"" + value + "\". "
-						+ "Image reference must be in the form '[domainHost:port/][path/]name[:tag][@digest]', "
-						+ "with 'path' and 'name' containing only [a-z0-9][.][_][-]");
+		Assert.isTrue(isLowerCase(path) && matchesPathRegex(path),
+				() -> "'value' [" + value + "] must be an image reference in the form "
+						+ "'[domainHost:port/][path/]name[:tag][@digest]' "
+						+ "(with 'path' and 'name' containing only [a-z0-9][.][_][-])");
 		ImageName name = new ImageName(domain, path);
 		return new ImageReference(name, tag, digest);
+	}
+
+	private static boolean isLowerCase(String path) {
+		return path.toLowerCase(Locale.ENGLISH).equals(path);
+	}
+
+	private static boolean matchesPathRegex(String path) {
+		return Regex.PATH.matcher(path).matches();
 	}
 
 	/**

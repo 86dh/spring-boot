@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,19 @@ import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.boot.ssl.SslBundle;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link ClientHttpRequestFactorySettings}.
  *
  * @author Phillip Webb
+ * @deprecated since 3.4.0 for removal in 3.6.0
  */
+@SuppressWarnings("removal")
+@Deprecated(since = "3.4.0", forRemoval = true)
 class ClientHttpRequestFactorySettingsTests {
 
 	private static final Duration ONE_SECOND = Duration.ofSeconds(1);
@@ -36,7 +42,7 @@ class ClientHttpRequestFactorySettingsTests {
 		ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS;
 		assertThat(settings.connectTimeout()).isNull();
 		assertThat(settings.readTimeout()).isNull();
-		assertThat(settings.bufferRequestBody()).isNull();
+		assertThat(settings.sslBundle()).isNull();
 	}
 
 	@Test
@@ -45,7 +51,7 @@ class ClientHttpRequestFactorySettingsTests {
 			.withConnectTimeout(ONE_SECOND);
 		assertThat(settings.connectTimeout()).isEqualTo(ONE_SECOND);
 		assertThat(settings.readTimeout()).isNull();
-		assertThat(settings.bufferRequestBody()).isNull();
+		assertThat(settings.sslBundle()).isNull();
 	}
 
 	@Test
@@ -54,16 +60,16 @@ class ClientHttpRequestFactorySettingsTests {
 			.withReadTimeout(ONE_SECOND);
 		assertThat(settings.connectTimeout()).isNull();
 		assertThat(settings.readTimeout()).isEqualTo(ONE_SECOND);
-		assertThat(settings.bufferRequestBody()).isNull();
+		assertThat(settings.sslBundle()).isNull();
 	}
 
 	@Test
-	void withBufferRequestBodyReturnsInstanceWithUpdatedBufferRequestBody() {
-		ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS
-			.withBufferRequestBody(true);
+	void withSslBundleReturnsInstanceWithUpdatedSslBundle() {
+		SslBundle sslBundle = mock(SslBundle.class);
+		ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS.withSslBundle(sslBundle);
 		assertThat(settings.connectTimeout()).isNull();
 		assertThat(settings.readTimeout()).isNull();
-		assertThat(settings.bufferRequestBody()).isTrue();
+		assertThat(settings.sslBundle()).isSameAs(sslBundle);
 	}
 
 }

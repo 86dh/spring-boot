@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import io.undertow.Undertow;
 import jakarta.servlet.Servlet;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.coyote.UpgradeProtocol;
+import org.eclipse.jetty.ee10.webapp.WebAppContext;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.Loader;
-import org.eclipse.jetty.webapp.WebAppContext;
 import org.xnio.SslClientAuthMode;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -88,7 +88,7 @@ class ServletWebServerFactoryConfiguration {
 	static class EmbeddedJetty {
 
 		@Bean
-		JettyServletWebServerFactory JettyServletWebServerFactory(
+		JettyServletWebServerFactory jettyServletWebServerFactory(
 				ObjectProvider<JettyServerCustomizer> serverCustomizers) {
 			JettyServletWebServerFactory factory = new JettyServletWebServerFactory();
 			factory.getServerCustomizers().addAll(serverCustomizers.orderedStream().toList());

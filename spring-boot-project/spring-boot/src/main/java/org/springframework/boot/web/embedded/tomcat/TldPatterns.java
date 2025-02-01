@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,10 +35,12 @@ final class TldPatterns {
 		Set<String> skipPatterns = new LinkedHashSet<>();
 		skipPatterns.add("annotations-api.jar");
 		skipPatterns.add("ant-junit*.jar");
-		skipPatterns.add("ant-launcher.jar");
-		skipPatterns.add("ant.jar");
+		skipPatterns.add("ant-launcher*.jar");
+		skipPatterns.add("ant*.jar");
 		skipPatterns.add("asm-*.jar");
 		skipPatterns.add("aspectj*.jar");
+		skipPatterns.add("bcel*.jar");
+		skipPatterns.add("biz.aQute.bnd*.jar");
 		skipPatterns.add("bootstrap.jar");
 		skipPatterns.add("catalina-ant.jar");
 		skipPatterns.add("catalina-ha.jar");
@@ -51,6 +53,7 @@ final class TldPatterns {
 		skipPatterns.add("commons-beanutils*.jar");
 		skipPatterns.add("commons-codec*.jar");
 		skipPatterns.add("commons-collections*.jar");
+		skipPatterns.add("commons-compress*.jar");
 		skipPatterns.add("commons-daemon.jar");
 		skipPatterns.add("commons-dbcp*.jar");
 		skipPatterns.add("commons-digester*.jar");
@@ -93,6 +96,8 @@ final class TldPatterns {
 		skipPatterns.add("mail*.jar");
 		skipPatterns.add("objenesis-*.jar");
 		skipPatterns.add("oraclepki.jar");
+		skipPatterns.add("org.hamcrest.core_*.jar");
+		skipPatterns.add("org.junit_*.jar");
 		skipPatterns.add("oro-*.jar");
 		skipPatterns.add("servlet-api-*.jar");
 		skipPatterns.add("servlet-api.jar");
@@ -101,6 +106,7 @@ final class TldPatterns {
 		skipPatterns.add("tagsoup-*.jar");
 		skipPatterns.add("tomcat-api.jar");
 		skipPatterns.add("tomcat-coyote.jar");
+		skipPatterns.add("tomcat-coyote-ffm.jar");
 		skipPatterns.add("tomcat-dbcp.jar");
 		skipPatterns.add("tomcat-i18n-*.jar");
 		skipPatterns.add("tomcat-jdbc.jar");
@@ -111,6 +117,7 @@ final class TldPatterns {
 		skipPatterns.add("tomcat-util.jar");
 		skipPatterns.add("tomcat-websocket.jar");
 		skipPatterns.add("tools.jar");
+		skipPatterns.add("unboundid-ldapsdk-*.jar");
 		skipPatterns.add("websocket-api.jar");
 		skipPatterns.add("websocket-client-api.jar");
 		skipPatterns.add("wsdl4j*.jar");
@@ -189,8 +196,7 @@ final class TldPatterns {
 	static final Set<String> DEFAULT_SCAN;
 
 	static {
-		Set<String> scanPatterns = new LinkedHashSet<>();
-		scanPatterns.addAll(TOMCAT_SCAN);
+		Set<String> scanPatterns = new LinkedHashSet<>(TOMCAT_SCAN);
 		DEFAULT_SCAN = Collections.unmodifiableSet(scanPatterns);
 	}
 

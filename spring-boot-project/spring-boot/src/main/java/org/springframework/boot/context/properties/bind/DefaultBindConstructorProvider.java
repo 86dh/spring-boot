@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,8 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 	public Constructor<?> getBindConstructor(Bindable<?> bindable, boolean isNestedConstructorBinding) {
 		Constructors constructors = Constructors.getConstructors(bindable.getType().resolve(),
 				isNestedConstructorBinding);
-		if (constructors.getBind() != null && constructors.isDeducedBindConstructor()) {
+		if (constructors.getBind() != null && constructors.isDeducedBindConstructor()
+				&& !constructors.isImmutableType()) {
 			if (bindable.getValue() != null && bindable.getValue().get() != null) {
 				return null;
 			}
@@ -60,7 +61,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 	 */
 	static final class Constructors {
 
-		private static final Constructors NONE = new Constructors(false, null, false);
+		private static final Constructors NONE = new Constructors(false, null, false, false);
 
 		private final boolean hasAutowired;
 
@@ -68,10 +69,14 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 
 		private final boolean deducedBindConstructor;
 
-		private Constructors(boolean hasAutowired, Constructor<?> bind, boolean deducedBindConstructor) {
+		private final boolean immutableType;
+
+		private Constructors(boolean hasAutowired, Constructor<?> bind, boolean deducedBindConstructor,
+				boolean immutableType) {
 			this.hasAutowired = hasAutowired;
 			this.bind = bind;
 			this.deducedBindConstructor = deducedBindConstructor;
+			this.immutableType = immutableType;
 		}
 
 		boolean hasAutowired() {
@@ -86,6 +91,10 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 			return this.deducedBindConstructor;
 		}
 
+		boolean isImmutableType() {
+			return this.immutableType;
+		}
+
 		static Constructors getConstructors(Class<?> type, boolean isNestedConstructorBinding) {
 			if (type == null) {
 				return NONE;
@@ -94,6 +103,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 			Constructor<?>[] candidates = getCandidateConstructors(type);
 			MergedAnnotations[] candidateAnnotations = getAnnotations(candidates);
 			boolean deducedBindConstructor = false;
+			boolean immutableType = type.isRecord();
 			Constructor<?> bind = getConstructorBindingAnnotated(type, candidates, candidateAnnotations);
 			if (bind == null && !hasAutowiredConstructor) {
 				bind = deduceBindConstructor(type, candidates);
@@ -107,7 +117,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 				Assert.state(!hasAutowiredConstructor,
 						() -> type.getName() + " declares @ConstructorBinding and @Autowired constructor");
 			}
-			return new Constructors(hasAutowiredConstructor, bind, deducedBindConstructor);
+			return new Constructors(hasAutowiredConstructor, bind, deducedBindConstructor, immutableType);
 		}
 
 		private static boolean isAutowiredPresent(Class<?> type) {
@@ -117,7 +127,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 				return true;
 			}
 			Class<?> userClass = ClassUtils.getUserClass(type);
-			return (userClass != type) ? isAutowiredPresent(userClass) : false;
+			return (userClass != type) && isAutowiredPresent(userClass);
 		}
 
 		private static Constructor<?>[] getCandidateConstructors(Class<?> type) {
@@ -125,7 +135,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 				return new Constructor<?>[0];
 			}
 			return Arrays.stream(type.getDeclaredConstructors())
-				.filter((constructor) -> isNonSynthetic(constructor, type))
+				.filter(Constructors::isNonSynthetic)
 				.toArray(Constructor[]::new);
 		}
 
@@ -138,7 +148,7 @@ class DefaultBindConstructorProvider implements BindConstructorProvider {
 			}
 		}
 
-		private static boolean isNonSynthetic(Constructor<?> constructor, Class<?> type) {
+		private static boolean isNonSynthetic(Constructor<?> constructor) {
 			return !constructor.isSynthetic();
 		}
 

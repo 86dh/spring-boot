@@ -20,8 +20,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.boot.cli.command.status.ExitStatus;
@@ -31,20 +29,19 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.Pbkdf2PasswordEncoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.assertArg;
 import static org.mockito.BDDMockito.then;
 
 /**
  * Tests for {@link EncodePasswordCommand}.
  *
  * @author Phillip Webb
+ * @author Moritz Halbritter
  */
 @ExtendWith(MockitoExtension.class)
 class EncodePasswordCommandTests {
 
 	private MockLog log;
-
-	@Captor
-	private ArgumentCaptor<String> message;
 
 	@BeforeEach
 	void setup() {
@@ -60,10 +57,21 @@ class EncodePasswordCommandTests {
 	void encodeWithNoAlgorithmShouldUseBcrypt() throws Exception {
 		EncodePasswordCommand command = new EncodePasswordCommand();
 		ExitStatus status = command.run("boot");
-		then(this.log).should().info(this.message.capture());
-		assertThat(this.message.getValue()).startsWith("{bcrypt}");
-		assertThat(PasswordEncoderFactories.createDelegatingPasswordEncoder().matches("boot", this.message.getValue()))
-			.isTrue();
+		then(this.log).should().info(assertArg((message) -> {
+			assertThat(message).startsWith("{bcrypt}");
+			assertThat(PasswordEncoderFactories.createDelegatingPasswordEncoder().matches("boot", message)).isTrue();
+		}));
+		assertThat(status).isEqualTo(ExitStatus.OK);
+	}
+
+	@Test
+	void encodeWithDefaultShouldUseBcrypt() throws Exception {
+		EncodePasswordCommand command = new EncodePasswordCommand();
+		ExitStatus status = command.run("-a", "default", "boot");
+		then(this.log).should().info(assertArg((message) -> {
+			assertThat(message).startsWith("{bcrypt}");
+			assertThat(PasswordEncoderFactories.createDelegatingPasswordEncoder().matches("boot", message)).isTrue();
+		}));
 		assertThat(status).isEqualTo(ExitStatus.OK);
 	}
 
@@ -71,9 +79,10 @@ class EncodePasswordCommandTests {
 	void encodeWithBCryptShouldUseBCrypt() throws Exception {
 		EncodePasswordCommand command = new EncodePasswordCommand();
 		ExitStatus status = command.run("-a", "bcrypt", "boot");
-		then(this.log).should().info(this.message.capture());
-		assertThat(this.message.getValue()).doesNotStartWith("{");
-		assertThat(new BCryptPasswordEncoder().matches("boot", this.message.getValue())).isTrue();
+		then(this.log).should().info(assertArg((message) -> {
+			assertThat(message).doesNotStartWith("{");
+			assertThat(new BCryptPasswordEncoder().matches("boot", message)).isTrue();
+		}));
 		assertThat(status).isEqualTo(ExitStatus.OK);
 	}
 
@@ -81,10 +90,10 @@ class EncodePasswordCommandTests {
 	void encodeWithPbkdf2ShouldUsePbkdf2() throws Exception {
 		EncodePasswordCommand command = new EncodePasswordCommand();
 		ExitStatus status = command.run("-a", "pbkdf2", "boot");
-		then(this.log).should().info(this.message.capture());
-		assertThat(this.message.getValue()).doesNotStartWith("{");
-		assertThat(Pbkdf2PasswordEncoder.defaultsForSpringSecurity_v5_8().matches("boot", this.message.getValue()))
-			.isTrue();
+		then(this.log).should().info(assertArg((message) -> {
+			assertThat(message).doesNotStartWith("{");
+			assertThat(Pbkdf2PasswordEncoder.defaultsForSpringSecurity_v5_8().matches("boot", message)).isTrue();
+		}));
 		assertThat(status).isEqualTo(ExitStatus.OK);
 	}
 

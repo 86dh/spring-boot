@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,8 +53,18 @@ class ColorConverterTests {
 		this.event = new TestLogEvent();
 	}
 
-	private ColorConverter newConverter(String styling) {
-		return ColorConverter.newInstance(null, new String[] { this.in, styling });
+	@Test
+	void black() {
+		StringBuilder output = new StringBuilder();
+		newConverter("black").format(this.event, output);
+		assertThat(output).hasToString("\033[30min\033[0;39m");
+	}
+
+	@Test
+	void white() {
+		StringBuilder output = new StringBuilder();
+		newConverter("white").format(this.event, output);
+		assertThat(output).hasToString("\033[37min\033[0;39m");
 	}
 
 	@Test
@@ -107,6 +117,62 @@ class ColorConverterTests {
 	}
 
 	@Test
+	void brightBlack() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_black").format(this.event, output);
+		assertThat(output).hasToString("\033[90min\033[0;39m");
+	}
+
+	@Test
+	void brightWhite() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_white").format(this.event, output);
+		assertThat(output).hasToString("\033[97min\033[0;39m");
+	}
+
+	@Test
+	void brightRed() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_red").format(this.event, output);
+		assertThat(output).hasToString("\033[91min\033[0;39m");
+	}
+
+	@Test
+	void brightGreen() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_green").format(this.event, output);
+		assertThat(output).hasToString("\033[92min\033[0;39m");
+	}
+
+	@Test
+	void brightYellow() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_yellow").format(this.event, output);
+		assertThat(output).hasToString("\033[93min\033[0;39m");
+	}
+
+	@Test
+	void brightBlue() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_blue").format(this.event, output);
+		assertThat(output).hasToString("\033[94min\033[0;39m");
+	}
+
+	@Test
+	void brightMagenta() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_magenta").format(this.event, output);
+		assertThat(output).hasToString("\033[95min\033[0;39m");
+	}
+
+	@Test
+	void brightCyan() {
+		StringBuilder output = new StringBuilder();
+		newConverter("bright_cyan").format(this.event, output);
+		assertThat(output).hasToString("\033[96min\033[0;39m");
+	}
+
+	@Test
 	void highlightFatal() {
 		this.event.setLevel(Level.FATAL);
 		StringBuilder output = new StringBuilder();
@@ -144,6 +210,10 @@ class ColorConverterTests {
 		StringBuilder output = new StringBuilder();
 		newConverter(null).format(this.event, output);
 		assertThat(output).hasToString("\033[32min\033[0;39m");
+	}
+
+	private ColorConverter newConverter(String styling) {
+		return ColorConverter.newInstance(null, new String[] { this.in, styling });
 	}
 
 	static class TestLogEvent extends AbstractLogEvent {

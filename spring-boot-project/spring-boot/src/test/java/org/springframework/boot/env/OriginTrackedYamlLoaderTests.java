@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,12 @@
 package org.springframework.boot.env;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.yaml.snakeyaml.constructor.ConstructorException;
+import org.yaml.snakeyaml.composer.ComposerException;
 
 import org.springframework.boot.origin.OriginTrackedValue;
 import org.springframework.boot.origin.TextResourceOrigin;
@@ -115,18 +114,19 @@ class OriginTrackedYamlLoaderTests {
 	void processEmptyAndNullValues() {
 		OriginTrackedValue empty = getValue("empty");
 		OriginTrackedValue nullValue = getValue("null-value");
+		OriginTrackedValue emptyList = getValue("emptylist");
 		assertThat(empty.getValue()).isEqualTo("");
 		assertThat(getLocation(empty)).isEqualTo("27:8");
 		assertThat(nullValue.getValue()).isEqualTo("");
 		assertThat(getLocation(nullValue)).isEqualTo("28:13");
+		assertThat(emptyList.getValue()).isEqualTo("");
+		assertThat(getLocation(emptyList)).isEqualTo("29:12");
 	}
 
 	@Test
-	void processEmptyListAndMap() {
-		OriginTrackedValue emptymap = getValue("emptymap");
-		OriginTrackedValue emptylist = getValue("emptylist");
-		assertThat(emptymap.getValue()).isEqualTo(Collections.emptyMap());
-		assertThat(emptylist.getValue()).isEqualTo(Collections.emptyList());
+	void emptyMapsAreDropped() {
+		Object emptyMap = getValue("emptymap");
+		assertThat(emptyMap).isNull();
 	}
 
 	@Test
@@ -134,7 +134,7 @@ class OriginTrackedYamlLoaderTests {
 		String yaml = "value: !!java.net.URL [!!java.lang.String [!!java.lang.StringBuilder [\"http://localhost:9000/\"]]]";
 		Resource resource = new ByteArrayResource(yaml.getBytes(StandardCharsets.UTF_8));
 		this.loader = new OriginTrackedYamlLoader(resource);
-		assertThatExceptionOfType(ConstructorException.class).isThrownBy(this.loader::load);
+		assertThatExceptionOfType(ComposerException.class).isThrownBy(this.loader::load);
 	}
 
 	@Test
@@ -182,11 +182,24 @@ class OriginTrackedYamlLoaderTests {
 		assertThat(loaded.get("some.anotherpath.config.key")).hasToString("value");
 	}
 
-	private OriginTrackedValue getValue(String name) {
+	@Test
+	void canLoadFilesBiggerThan3Mb() {
+		StringBuilder yaml = new StringBuilder();
+		while (yaml.length() < 4_194_304) {
+			yaml.append("- some list entry\n");
+		}
+		Resource resource = new ByteArrayResource(yaml.toString().getBytes(StandardCharsets.UTF_8));
+		this.loader = new OriginTrackedYamlLoader(resource);
+		Map<String, Object> loaded = this.loader.load().get(0);
+		assertThat(loaded).isNotEmpty();
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T> T getValue(String name) {
 		if (this.result == null) {
 			this.result = this.loader.load();
 		}
-		return (OriginTrackedValue) this.result.get(0).get(name);
+		return (T) this.result.get(0).get(name);
 	}
 
 	private String getLocation(OriginTrackedValue value) {

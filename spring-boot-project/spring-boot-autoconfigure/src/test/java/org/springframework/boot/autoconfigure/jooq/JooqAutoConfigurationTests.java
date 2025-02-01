@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,12 +28,15 @@ import org.jooq.SQLDialect;
 import org.jooq.TransactionContext;
 import org.jooq.TransactionProvider;
 import org.jooq.TransactionalRunnable;
+import org.jooq.conf.Settings;
 import org.jooq.impl.DataSourceConnectionProvider;
+import org.jooq.impl.DefaultDSLContext;
 import org.jooq.impl.DefaultExecuteListenerProvider;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,6 +58,8 @@ import static org.mockito.Mockito.mock;
  * @author Andy Wilkinson
  * @author Stephane Nicoll
  * @author Dmytro Nosan
+ * @author Dennis Melzer
+ * @author Moritz Halbritter
  */
 class JooqAutoConfigurationTests {
 
@@ -181,6 +186,26 @@ class JooqAutoConfigurationTests {
 	}
 
 	@Test
+	void jooqExceptionTranslatorProviderFromConfigurationCustomizerOverridesJooqExceptionTranslatorBean() {
+		this.contextRunner
+			.withUserConfiguration(JooqDataSourceConfiguration.class, CustomJooqExceptionTranslatorConfiguration.class)
+			.run((context) -> {
+				assertThat(context.getBean(ExceptionTranslatorExecuteListener.class))
+					.isInstanceOf(CustomJooqExceptionTranslator.class);
+				assertThat(context.getBean(DefaultExecuteListenerProvider.class).provide())
+					.isInstanceOf(CustomJooqExceptionTranslator.class);
+			});
+	}
+
+	@Test
+	void jooqWithDefaultJooqExceptionTranslator() {
+		this.contextRunner.withUserConfiguration(JooqDataSourceConfiguration.class).run((context) -> {
+			ExceptionTranslatorExecuteListener translator = context.getBean(ExceptionTranslatorExecuteListener.class);
+			assertThat(translator).isInstanceOf(DefaultExceptionTranslatorExecuteListener.class);
+		});
+	}
+
+	@Test
 	void transactionProviderFromConfigurationCustomizerOverridesTransactionProviderBean() {
 		this.contextRunner
 			.withUserConfiguration(JooqDataSourceConfiguration.class, TxManagerConfiguration.class,
@@ -191,6 +216,43 @@ class JooqAutoConfigurationTests {
 				DSLContext dsl = context.getBean(DSLContext.class);
 				assertThat(dsl.configuration().transactionProvider()).isInstanceOf(CustomTransactionProvider.class);
 			});
+	}
+
+	@Test
+	void autoConfiguredJooqConfigurationCanBeUsedToCreateCustomDslContext() {
+		this.contextRunner.withUserConfiguration(CustomDslContextConfiguration.class, JooqDataSourceConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(DSLContext.class).hasBean("customDslContext"));
+	}
+
+	@Test
+	void shouldLoadSettingsFromConfigPropertyThroughJaxb() {
+		this.contextRunner.withUserConfiguration(JooqDataSourceConfiguration.class)
+			.withPropertyValues("spring.jooq.config=classpath:org/springframework/boot/autoconfigure/jooq/settings.xml")
+			.run((context) -> {
+				assertThat(context).hasSingleBean(Settings.class);
+				Settings settings = context.getBean(Settings.class);
+				assertThat(settings.getBatchSize()).isEqualTo(100);
+			});
+	}
+
+	@Test
+	void shouldNotProvideSettingsIfJaxbIsMissing() {
+		this.contextRunner.withUserConfiguration(JooqDataSourceConfiguration.class)
+			.withClassLoader(new FilteredClassLoader("jakarta.xml.bind"))
+			.withPropertyValues("spring.jooq.config=classpath:org/springframework/boot/autoconfigure/jooq/settings.xml")
+			.run((context) -> assertThat(context).hasFailed()
+				.getFailure()
+				.hasRootCauseInstanceOf(JaxbNotAvailableException.class));
+	}
+
+	@Test
+	void shouldFailWithSensibleErrorMessageIfConfigIsNotFound() {
+		this.contextRunner.withUserConfiguration(JooqDataSourceConfiguration.class)
+			.withPropertyValues("spring.jooq.config=classpath:does-not-exist.xml")
+			.run((context) -> assertThat(context).hasFailed()
+				.getFailure()
+				.hasMessageContaining("spring.jooq.config")
+				.hasMessageContaining("does-not-exist.xml"));
 	}
 
 	static class AssertFetch implements TransactionalRunnable {
@@ -255,6 +317,16 @@ class JooqAutoConfigurationTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
+	static class CustomJooqExceptionTranslatorConfiguration {
+
+		@Bean
+		ExceptionTranslatorExecuteListener jooqExceptionTranslator() {
+			return new CustomJooqExceptionTranslator();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
 	static class CustomTransactionProviderFromCustomizerConfiguration {
 
 		@Bean
@@ -270,6 +342,16 @@ class JooqAutoConfigurationTests {
 		@Bean
 		PlatformTransactionManager transactionManager(DataSource dataSource) {
 			return new DataSourceTransactionManager(dataSource);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class CustomDslContextConfiguration {
+
+		@Bean
+		DSLContext customDslContext(org.jooq.Configuration configuration) {
+			return new DefaultDSLContext(configuration);
 		}
 
 	}
@@ -300,6 +382,10 @@ class JooqAutoConfigurationTests {
 		public void rollback(TransactionContext ctx) {
 
 		}
+
+	}
+
+	static class CustomJooqExceptionTranslator implements ExceptionTranslatorExecuteListener {
 
 	}
 

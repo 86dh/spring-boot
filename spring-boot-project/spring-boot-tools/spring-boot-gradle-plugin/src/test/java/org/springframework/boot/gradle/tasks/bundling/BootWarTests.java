@@ -22,7 +22,6 @@ import java.util.jar.JarFile;
 
 import org.gradle.api.Action;
 import org.gradle.api.JavaVersion;
-import org.gradle.api.artifacts.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BootWarTests extends AbstractBootArchiveTests<BootWar> {
 
 	BootWarTests() {
-		super(BootWar.class, "org.springframework.boot.loader.WarLauncher", "WEB-INF/lib/", "WEB-INF/classes/",
+		super(BootWar.class, "org.springframework.boot.loader.launch.WarLauncher", "WEB-INF/lib/", "WEB-INF/classes/",
 				"WEB-INF/");
 	}
 
@@ -155,11 +154,6 @@ class BootWarTests extends AbstractBootArchiveTests<BootWar> {
 	@Override
 	protected void executeTask() {
 		getTask().copy();
-	}
-
-	@Override
-	void populateResolvedDependencies(Configuration configuration) {
-		getTask().getResolvedDependencies().processConfiguration(getTask().getProject(), configuration);
 	}
 
 	@Override

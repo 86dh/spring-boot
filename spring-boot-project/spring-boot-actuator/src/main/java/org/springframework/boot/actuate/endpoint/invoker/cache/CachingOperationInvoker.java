@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,7 @@ package org.springframework.boot.actuate.endpoint.invoker.cache;
 import java.security.Principal;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
 
 import reactor.core.publisher.Flux;
@@ -67,7 +65,7 @@ public class CachingOperationInvoker implements OperationInvoker {
 	 * @param timeToLive the maximum time in milliseconds that a response can be cached
 	 */
 	CachingOperationInvoker(OperationInvoker invoker, long timeToLive) {
-		Assert.isTrue(timeToLive > 0, "TimeToLive must be strictly positive");
+		Assert.isTrue(timeToLive > 0, "'timeToLive' must be greater than zero");
 		this.invoker = invoker;
 		this.timeToLive = timeToLive;
 		this.cachedResponses = new ConcurrentReferenceHashMap<>();
@@ -109,15 +107,10 @@ public class CachingOperationInvoker implements OperationInvoker {
 
 	private void cleanExpiredCachedResponses(long accessTime) {
 		try {
-			Iterator<Entry<CacheKey, CachedResponse>> iterator = this.cachedResponses.entrySet().iterator();
-			while (iterator.hasNext()) {
-				Entry<CacheKey, CachedResponse> entry = iterator.next();
-				if (entry.getValue().isStale(accessTime, this.timeToLive)) {
-					iterator.remove();
-				}
-			}
+			this.cachedResponses.entrySet().removeIf((entry) -> entry.getValue().isStale(accessTime, this.timeToLive));
 		}
 		catch (Exception ex) {
+			// Ignore
 		}
 	}
 

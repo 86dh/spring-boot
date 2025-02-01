@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,8 +76,8 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 	private final ClientHttpRequestFactory requestFactory;
 
 	public ClassPathChangeUploader(String url, ClientHttpRequestFactory requestFactory) {
-		Assert.hasLength(url, "URL must not be empty");
-		Assert.notNull(requestFactory, "RequestFactory must not be null");
+		Assert.hasLength(url, "'url' must not be empty");
+		Assert.notNull(requestFactory, "'requestFactory' must not be null");
 		try {
 			this.uri = new URL(url).toURI();
 		}
@@ -92,15 +92,14 @@ public class ClassPathChangeUploader implements ApplicationListener<ClassPathCha
 		try {
 			ClassLoaderFiles classLoaderFiles = getClassLoaderFiles(event);
 			byte[] bytes = serialize(classLoaderFiles);
-			performUpload(classLoaderFiles, bytes, event);
+			performUpload(bytes, event);
 		}
 		catch (IOException ex) {
 			throw new IllegalStateException(ex);
 		}
 	}
 
-	private void performUpload(ClassLoaderFiles classLoaderFiles, byte[] bytes, ClassPathChangedEvent event)
-			throws IOException {
+	private void performUpload(byte[] bytes, ClassPathChangedEvent event) throws IOException {
 		try {
 			while (true) {
 				try {

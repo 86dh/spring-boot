@@ -31,6 +31,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NewRelicPropertiesConfigAdapterTests
 		extends StepRegistryPropertiesConfigAdapterTests<NewRelicProperties, NewRelicPropertiesConfigAdapter> {
 
+	NewRelicPropertiesConfigAdapterTests() {
+		super(NewRelicPropertiesConfigAdapter.class);
+	}
+
 	@Override
 	protected NewRelicProperties createProperties() {
 		return new NewRelicProperties();
@@ -63,7 +67,7 @@ class NewRelicPropertiesConfigAdapterTests
 	}
 
 	@Test
-	void whenPropertiesApikeyIsSetAdapterApikeyReturnsIt() {
+	void whenPropertiesApiKeyIsSetAdapterApiKeyReturnsIt() {
 		NewRelicProperties properties = createProperties();
 		properties.setApiKey("my-key");
 		assertThat(createConfigAdapter(properties).apiKey()).isEqualTo("my-key");

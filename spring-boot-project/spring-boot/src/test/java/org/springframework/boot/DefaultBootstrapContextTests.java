@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,13 +51,13 @@ class DefaultBootstrapContextTests {
 	@Test
 	void registerWhenTypeIsNullThrowsException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> this.context.register(null, InstanceSupplier.of(1)))
-			.withMessage("Type must not be null");
+			.withMessage("'type' must not be null");
 	}
 
 	@Test
 	void registerWhenRegistrationIsNullThrowException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> this.context.register(Integer.class, null))
-			.withMessage("InstanceSupplier must not be null");
+			.withMessage("'instanceSupplier' must not be null");
 	}
 
 	@Test
@@ -275,7 +275,7 @@ class DefaultBootstrapContextTests {
 		assertThat(supplier.get(null)).isEqualTo("test");
 	}
 
-	private static class TestCloseListener
+	private static final class TestCloseListener
 			implements ApplicationListener<BootstrapContextClosedEvent>, AssertProvider<CloseListenerAssert> {
 
 		private int called;

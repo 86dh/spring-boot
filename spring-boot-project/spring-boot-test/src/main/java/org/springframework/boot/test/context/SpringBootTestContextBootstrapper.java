@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import org.springframework.core.annotation.MergedAnnotation;
 import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.core.annotation.MergedAnnotations.SearchStrategy;
 import org.springframework.core.env.Environment;
-import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.ContextConfigurationAttributes;
 import org.springframework.test.context.ContextCustomizer;
@@ -48,7 +47,6 @@ import org.springframework.test.context.MergedContextConfiguration;
 import org.springframework.test.context.TestContext;
 import org.springframework.test.context.TestContextAnnotationUtils;
 import org.springframework.test.context.TestContextBootstrapper;
-import org.springframework.test.context.TestExecutionListener;
 import org.springframework.test.context.aot.AotTestAttributes;
 import org.springframework.test.context.support.DefaultTestContextBootstrapper;
 import org.springframework.test.context.support.TestPropertySourceUtils;
@@ -120,18 +118,6 @@ public class SpringBootTestContextBootstrapper extends DefaultTestContextBootstr
 			context.setAttribute(ACTIVATE_SERVLET_LISTENER, false);
 		}
 		return context;
-	}
-
-	@Override
-	@SuppressWarnings("removal")
-	protected List<TestExecutionListener> getDefaultTestExecutionListeners() {
-		List<TestExecutionListener> listeners = new ArrayList<>(super.getDefaultTestExecutionListeners());
-		List<DefaultTestExecutionListenersPostProcessor> postProcessors = SpringFactoriesLoader
-			.loadFactories(DefaultTestExecutionListenersPostProcessor.class, getClass().getClassLoader());
-		for (DefaultTestExecutionListenersPostProcessor postProcessor : postProcessors) {
-			listeners = postProcessor.postProcessDefaultTestExecutionListeners(listeners);
-		}
-		return listeners;
 	}
 
 	@Override
@@ -257,8 +243,11 @@ public class SpringBootTestContextBootstrapper extends DefaultTestContextBootstr
 			return ClassUtils.resolveClassName(foundClassName, testClass.getClassLoader());
 		}
 		Class<?> found = new AnnotatedClassFinder(SpringBootConfiguration.class).findFromClass(testClass);
-		Assert.state(found != null, "Unable to find a @SpringBootConfiguration, you need to use "
-				+ "@ContextConfiguration or @SpringBootTest(classes=...) with your test");
+		Assert.state(found != null,
+				"Unable to find a @SpringBootConfiguration by searching packages upwards from the test. "
+						+ "You can use @ContextConfiguration, @SpringBootTest(classes=...) or other Spring Test "
+						+ "supported mechanisms to explicitly declare the configuration classes to load. Classes "
+						+ "annotated with @TestConfiguration are not considered.");
 		this.aotTestAttributes.setAttribute(propertyName, found.getName());
 		return found;
 	}
@@ -390,7 +379,7 @@ public class SpringBootTestContextBootstrapper extends DefaultTestContextBootstr
 		contextCustomizers.add(new SpringBootTestAnnotation(mergedConfig.getTestClass()));
 		return new MergedContextConfiguration(mergedConfig.getTestClass(), mergedConfig.getLocations(), classes,
 				mergedConfig.getContextInitializerClasses(), mergedConfig.getActiveProfiles(),
-				mergedConfig.getPropertySourceLocations(), propertySourceProperties, contextCustomizers,
+				mergedConfig.getPropertySourceDescriptors(), propertySourceProperties, contextCustomizers,
 				mergedConfig.getContextLoader(), getCacheAwareContextLoaderDelegate(), mergedConfig.getParent());
 	}
 

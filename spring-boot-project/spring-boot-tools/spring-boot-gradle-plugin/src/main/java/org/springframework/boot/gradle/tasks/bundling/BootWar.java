@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 package org.springframework.boot.gradle.tasks.bundling;
 
 import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
 
 import org.gradle.api.Action;
 import org.gradle.api.Project;
-import org.gradle.api.artifacts.ResolvableDependencies;
+import org.gradle.api.artifacts.result.ResolvedArtifactResult;
 import org.gradle.api.file.CopySpec;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileCopyDetails;
@@ -31,11 +32,12 @@ import org.gradle.api.internal.file.copy.CopyAction;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.Classpath;
-import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.bundling.War;
 import org.gradle.work.DisableCachingByDefault;
+
+import org.springframework.boot.loader.tools.LoaderImplementation;
 
 /**
  * A custom {@link War} task that produces a Spring Boot executable war.
@@ -48,7 +50,7 @@ import org.gradle.work.DisableCachingByDefault;
 @DisableCachingByDefault(because = "Not worth caching")
 public abstract class BootWar extends War implements BootArchive {
 
-	private static final String LAUNCHER = "org.springframework.boot.loader.WarLauncher";
+	private static final String LAUNCHER = "org.springframework.boot.loader.launch.WarLauncher";
 
 	private static final String CLASSES_DIRECTORY = "WEB-INF/classes/";
 
@@ -62,13 +64,13 @@ public abstract class BootWar extends War implements BootArchive {
 
 	private final BootArchiveSupport support;
 
-	private final ResolvedDependencies resolvedDependencies = new ResolvedDependencies();
-
 	private final LayeredSpec layered;
 
 	private final Provider<String> projectName;
 
 	private final Provider<Object> projectVersion;
+
+	private final ResolvedDependencies resolvedDependencies;
 
 	private FileCollection providedClasspath;
 
@@ -82,20 +84,24 @@ public abstract class BootWar extends War implements BootArchive {
 		getWebInf().into("lib-provided", fromCallTo(this::getProvidedLibFiles));
 		this.support.moveModuleInfoToRoot(getRootSpec());
 		getRootSpec().eachFile(this.support::excludeNonZipLibraryFiles);
-		project.getConfigurations().all((configuration) -> {
-			ResolvableDependencies incoming = configuration.getIncoming();
-			incoming.afterResolve((resolvableDependencies) -> {
-				if (resolvableDependencies == incoming) {
-					this.resolvedDependencies.processConfiguration(project, configuration);
-				}
-			});
-		});
 		this.projectName = project.provider(project::getName);
 		this.projectVersion = project.provider(project::getVersion);
+		this.resolvedDependencies = new ResolvedDependencies(project);
+		getIncludeTools().convention(true);
 	}
 
 	private Object getProvidedLibFiles() {
 		return (this.providedClasspath != null) ? this.providedClasspath : Collections.emptyList();
+	}
+
+	@Override
+	public void resolvedArtifacts(Provider<Set<ResolvedArtifactResult>> resolvedArtifacts) {
+		this.resolvedDependencies.resolvedArtifacts(resolvedArtifacts);
+	}
+
+	@Nested
+	ResolvedDependencies getResolvedDependencies() {
+		return this.resolvedDependencies;
 	}
 
 	@Override
@@ -112,12 +118,18 @@ public abstract class BootWar extends War implements BootArchive {
 
 	@Override
 	protected CopyAction createCopyAction() {
+		LoaderImplementation loaderImplementation = getLoaderImplementation().getOrElse(LoaderImplementation.DEFAULT);
+		LayerResolver layerResolver = null;
 		if (!isLayeredDisabled()) {
-			LayerResolver layerResolver = new LayerResolver(this.resolvedDependencies, this.layered, this::isLibrary);
-			String layerToolsLocation = this.layered.getIncludeLayerTools().get() ? LIB_DIRECTORY : null;
-			return this.support.createCopyAction(this, this.resolvedDependencies, layerResolver, layerToolsLocation);
+			layerResolver = new LayerResolver(this.resolvedDependencies, this.layered, this::isLibrary);
 		}
-		return this.support.createCopyAction(this, this.resolvedDependencies);
+		String jarmodeToolsLocation = isIncludeJarmodeTools() ? LIB_DIRECTORY : null;
+		return this.support.createCopyAction(this, this.resolvedDependencies, loaderImplementation, false,
+				layerResolver, jarmodeToolsLocation);
+	}
+
+	private boolean isIncludeJarmodeTools() {
+		return Boolean.TRUE.equals(this.getIncludeTools().get());
 	}
 
 	@Override
@@ -238,11 +250,6 @@ public abstract class BootWar extends War implements BootArchive {
 			this.support.setLaunchScript(launchScript);
 		}
 		return launchScript;
-	}
-
-	@Internal
-	ResolvedDependencies getResolvedDependencies() {
-		return this.resolvedDependencies;
 	}
 
 	/**

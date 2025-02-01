@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,12 @@
 
 package org.springframework.boot.actuate.autoconfigure.observation.web.servlet;
 
-import java.util.Collections;
 import java.util.EnumSet;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tag;
 import io.micrometer.observation.tck.TestObservationRegistry;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.Filter;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -33,9 +29,6 @@ import org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfigu
 import org.springframework.boot.actuate.autoconfigure.metrics.test.MetricsRun;
 import org.springframework.boot.actuate.autoconfigure.metrics.web.TestController;
 import org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration;
-import org.springframework.boot.actuate.metrics.web.servlet.DefaultWebMvcTagsProvider;
-import org.springframework.boot.actuate.metrics.web.servlet.WebMvcTagsContributor;
-import org.springframework.boot.actuate.metrics.web.servlet.WebMvcTagsProvider;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration;
 import org.springframework.boot.test.context.assertj.AssertableWebApplicationContext;
@@ -47,14 +40,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.http.server.observation.DefaultServerRequestObservationConvention;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.web.filter.ServerHttpObservationFilter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Tests for {@link WebMvcObservationAutoConfiguration}.
@@ -66,7 +56,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author Chanhyeong LEE
  */
 @ExtendWith(OutputCaptureExtension.class)
-@SuppressWarnings("removal")
 class WebMvcObservationAutoConfigurationTests {
 
 	private final WebApplicationContextRunner contextRunner = new WebApplicationContextRunner()
@@ -84,19 +73,10 @@ class WebMvcObservationAutoConfigurationTests {
 	@Test
 	void definesFilterWhenRegistryIsPresent() {
 		this.contextRunner.run((context) -> {
-			assertThat(context).doesNotHaveBean(DefaultWebMvcTagsProvider.class);
 			assertThat(context).hasSingleBean(FilterRegistrationBean.class);
 			assertThat(context.getBean(FilterRegistrationBean.class).getFilter())
 				.isInstanceOf(ServerHttpObservationFilter.class);
 		});
-	}
-
-	@Test
-	void adapterConventionWhenTagsProviderPresent() {
-		this.contextRunner.withUserConfiguration(TagsProviderConfiguration.class)
-			.run((context) -> assertThat(context.getBean(FilterRegistrationBean.class).getFilter())
-				.extracting("observationConvention")
-				.isInstanceOf(ServerRequestObservationConventionAdapter.class));
 	}
 
 	@Test
@@ -160,21 +140,6 @@ class WebMvcObservationAutoConfigurationTests {
 	}
 
 	@Test
-	@Deprecated(since = "3.0.0", forRemoval = true)
-	void afterMaxUrisReachedFurtherUrisAreDeniedWhenUsingCustomMetricName(CapturedOutput output) {
-		this.contextRunner.withUserConfiguration(TestController.class)
-			.withConfiguration(AutoConfigurations.of(MetricsAutoConfiguration.class, ObservationAutoConfiguration.class,
-					WebMvcAutoConfiguration.class))
-			.withPropertyValues("management.metrics.web.server.max-uri-tags=2",
-					"management.metrics.web.server.request.metric-name=my.http.server.requests")
-			.run((context) -> {
-				MeterRegistry registry = getInitializedMeterRegistry(context);
-				assertThat(registry.get("my.http.server.requests").meters()).hasSizeLessThanOrEqualTo(2);
-				assertThat(output).contains("Reached the maximum number of URI tags for 'my.http.server.requests'");
-			});
-	}
-
-	@Test
 	void afterMaxUrisReachedFurtherUrisAreDeniedWhenUsingCustomObservationName(CapturedOutput output) {
 		this.contextRunner.withUserConfiguration(TestController.class)
 			.withConfiguration(AutoConfigurations.of(MetricsAutoConfiguration.class, ObservationAutoConfiguration.class,
@@ -201,69 +166,19 @@ class WebMvcObservationAutoConfigurationTests {
 			});
 	}
 
-	@Test
-	void whenTagContributorsAreDefinedThenTagsProviderUsesThem() {
-		this.contextRunner.withUserConfiguration(TagsContributorsConfiguration.class)
-			.run((context) -> assertThat(context.getBean(FilterRegistrationBean.class).getFilter())
-				.extracting("observationConvention")
-				.isInstanceOf(ServerRequestObservationConventionAdapter.class));
-	}
-
-	private MeterRegistry getInitializedMeterRegistry(AssertableWebApplicationContext context) throws Exception {
+	private MeterRegistry getInitializedMeterRegistry(AssertableWebApplicationContext context) {
 		return getInitializedMeterRegistry(context, "/test0", "/test1", "/test2");
 	}
 
-	private MeterRegistry getInitializedMeterRegistry(AssertableWebApplicationContext context, String... urls)
-			throws Exception {
+	private MeterRegistry getInitializedMeterRegistry(AssertableWebApplicationContext context, String... urls) {
 		assertThat(context).hasSingleBean(FilterRegistrationBean.class);
 		Filter filter = context.getBean(FilterRegistrationBean.class).getFilter();
 		assertThat(filter).isInstanceOf(ServerHttpObservationFilter.class);
-		MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context).addFilters(filter).build();
+		MockMvcTester mvc = MockMvcTester.from(context, (builder) -> builder.addFilters(filter).build());
 		for (String url : urls) {
-			mockMvc.perform(MockMvcRequestBuilders.get(url)).andExpect(status().isOk());
+			assertThat(mvc.get().uri(url)).hasStatusOk();
 		}
 		return context.getBean(MeterRegistry.class);
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class TagsProviderConfiguration {
-
-		@Bean
-		TestWebMvcTagsProvider tagsProvider() {
-			return new TestWebMvcTagsProvider();
-		}
-
-	}
-
-	@Configuration(proxyBeanMethods = false)
-	static class TagsContributorsConfiguration {
-
-		@Bean
-		WebMvcTagsContributor tagContributorOne() {
-			return mock(WebMvcTagsContributor.class);
-		}
-
-		@Bean
-		WebMvcTagsContributor tagContributorTwo() {
-			return mock(WebMvcTagsContributor.class);
-		}
-
-	}
-
-	@Deprecated(since = "3.0.0", forRemoval = true)
-	private static final class TestWebMvcTagsProvider implements WebMvcTagsProvider {
-
-		@Override
-		public Iterable<Tag> getTags(HttpServletRequest request, HttpServletResponse response, Object handler,
-				Throwable exception) {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public Iterable<Tag> getLongRequestTags(HttpServletRequest request, Object handler) {
-			return Collections.emptyList();
-		}
-
 	}
 
 	@Configuration(proxyBeanMethods = false)

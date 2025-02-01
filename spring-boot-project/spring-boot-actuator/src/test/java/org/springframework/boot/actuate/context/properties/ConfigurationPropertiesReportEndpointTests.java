@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,9 @@ import org.springframework.boot.test.context.runner.ContextConsumer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.PropertySource;
 import org.springframework.mock.env.MockPropertySource;
 import org.springframework.util.unit.DataSize;
 
@@ -148,6 +151,21 @@ class ConfigurationPropertiesReportEndpointTests {
 		this.contextRunner.withUserConfiguration(TestPropertiesConfiguration.class)
 			.run(assertProperties("test", (properties) -> assertThat(properties.get("duration"))
 				.isEqualTo(Duration.ofSeconds(10).toString())));
+	}
+
+	@Test // gh-36076
+	void descriptorWithWrapperProperty() {
+		this.contextRunner.withUserConfiguration(TestPropertiesConfiguration.class).withInitializer((context) -> {
+			ConfigurableEnvironment environment = context.getEnvironment();
+			Map<String, Object> map = Collections.singletonMap("test.wrapper", 10);
+			PropertySource<?> propertySource = new MapPropertySource("test", map);
+			environment.getPropertySources().addLast(propertySource);
+		})
+			.run(assertProperties("test", (properties) -> assertThat(properties.get("wrapper")).isEqualTo(10),
+					(inputs) -> {
+						Map<String, Object> wrapper = (Map<String, Object>) inputs.get("wrapper");
+						assertThat(wrapper.get("value")).isEqualTo(10);
+					}));
 	}
 
 	@Test
@@ -439,7 +457,7 @@ class ConfigurationPropertiesReportEndpointTests {
 
 	}
 
-	@ConfigurationProperties(prefix = "test")
+	@ConfigurationProperties("test")
 	public static class TestProperties {
 
 		private String dbPassword = "123456";
@@ -451,6 +469,8 @@ class ConfigurationPropertiesReportEndpointTests {
 		private Duration duration = Duration.ofSeconds(10);
 
 		private final String ignored = "dummy";
+
+		private Integer wrapper;
 
 		public String getDbPassword() {
 			return this.dbPassword;
@@ -488,6 +508,14 @@ class ConfigurationPropertiesReportEndpointTests {
 			return this.ignored;
 		}
 
+		public Integer getWrapper() {
+			return this.wrapper;
+		}
+
+		public void setWrapper(Integer wrapper) {
+			this.wrapper = wrapper;
+		}
+
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -496,7 +524,7 @@ class ConfigurationPropertiesReportEndpointTests {
 
 	}
 
-	@ConfigurationProperties(prefix = "immutable")
+	@ConfigurationProperties("immutable")
 	public static class ImmutableProperties {
 
 		private final String dbPassword;
@@ -546,7 +574,7 @@ class ConfigurationPropertiesReportEndpointTests {
 
 	}
 
-	@ConfigurationProperties(prefix = "multiconstructor")
+	@ConfigurationProperties("multiconstructor")
 	public static class MultiConstructorProperties {
 
 		private final String name;
@@ -585,7 +613,7 @@ class ConfigurationPropertiesReportEndpointTests {
 
 	}
 
-	@ConfigurationProperties(prefix = "autowired")
+	@ConfigurationProperties("autowired")
 	public static class AutowiredProperties {
 
 		private final String name;

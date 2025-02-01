@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,10 +77,7 @@ class HazelcastServerConfiguration {
 
 		private Config loadConfig(Resource configLocation) throws IOException {
 			URL configUrl = configLocation.getURL();
-			Config config;
-			try (InputStream stream = configUrl.openStream()) {
-				config = Config.loadFromStream(stream);
-			}
+			Config config = loadConfig(configUrl);
 			if (ResourceUtils.isFileURL(configUrl)) {
 				config.setConfigurationFile(configLocation.getFile());
 			}
@@ -88,6 +85,12 @@ class HazelcastServerConfiguration {
 				config.setConfigurationUrl(configUrl);
 			}
 			return config;
+		}
+
+		private Config loadConfig(URL configUrl) throws IOException {
+			try (InputStream stream = configUrl.openStream()) {
+				return Config.loadFromStream(stream);
+			}
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,13 @@
 
 package org.springframework.boot.autoconfigure.transaction;
 
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.LazyInitializationExcludeFilter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,6 +30,7 @@ import org.springframework.transaction.ReactiveTransactionManager;
 import org.springframework.transaction.TransactionManager;
 import org.springframework.transaction.annotation.AbstractTransactionManagementConfiguration;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.aspectj.AbstractTransactionAspect;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,15 +44,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @AutoConfiguration
 @ConditionalOnClass(PlatformTransactionManager.class)
-@EnableConfigurationProperties(TransactionProperties.class)
 public class TransactionAutoConfiguration {
-
-	@Bean
-	@ConditionalOnMissingBean
-	public TransactionManagerCustomizers platformTransactionManagerCustomizers(
-			ObjectProvider<PlatformTransactionManagerCustomizer<?>> customizers) {
-		return new TransactionManagerCustomizers(customizers.orderedStream().toList());
-	}
 
 	@Bean
 	@ConditionalOnMissingBean
@@ -80,17 +72,27 @@ public class TransactionAutoConfiguration {
 
 		@Configuration(proxyBeanMethods = false)
 		@EnableTransactionManagement(proxyTargetClass = false)
-		@ConditionalOnProperty(prefix = "spring.aop", name = "proxy-target-class", havingValue = "false")
+		@ConditionalOnBooleanProperty(name = "spring.aop.proxy-target-class", havingValue = false)
 		public static class JdkDynamicAutoProxyConfiguration {
 
 		}
 
 		@Configuration(proxyBeanMethods = false)
 		@EnableTransactionManagement(proxyTargetClass = true)
-		@ConditionalOnProperty(prefix = "spring.aop", name = "proxy-target-class", havingValue = "true",
-				matchIfMissing = true)
+		@ConditionalOnBooleanProperty(name = "spring.aop.proxy-target-class", matchIfMissing = true)
 		public static class CglibAutoProxyConfiguration {
 
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnBean(AbstractTransactionAspect.class)
+	static class AspectJTransactionManagementConfiguration {
+
+		@Bean
+		static LazyInitializationExcludeFilter eagerTransactionAspect() {
+			return LazyInitializationExcludeFilter.forBeanTypes(AbstractTransactionAspect.class);
 		}
 
 	}

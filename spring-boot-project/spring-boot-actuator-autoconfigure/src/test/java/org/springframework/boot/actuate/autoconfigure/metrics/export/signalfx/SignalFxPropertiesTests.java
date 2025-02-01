@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for {@link SignalFxProperties}.
  *
  * @author Stephane Nicoll
+ * @deprecated since 3.5.0 for removal in 3.7.0
  */
+@SuppressWarnings("removal")
+@Deprecated(since = "3.5.0", forRemoval = true)
 class SignalFxPropertiesTests extends StepRegistryPropertiesTests {
 
 	@Test
@@ -38,6 +41,11 @@ class SignalFxPropertiesTests extends StepRegistryPropertiesTests {
 		// access token is mandatory
 		assertThat(properties.getUri()).isEqualTo(config.uri());
 		// source has no static default value
+		// Not publishing cumulative or delta histograms implies that the default
+		// histogram type should be published.
+		assertThat(config.publishCumulativeHistogram()).isFalse();
+		assertThat(config.publishDeltaHistogram()).isFalse();
+		assertThat(properties.getPublishedHistogramType()).isEqualTo(SignalFxProperties.HistogramType.DEFAULT);
 	}
 
 }

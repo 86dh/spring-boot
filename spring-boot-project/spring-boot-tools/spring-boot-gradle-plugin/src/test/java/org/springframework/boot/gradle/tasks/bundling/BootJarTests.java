@@ -22,7 +22,6 @@ import java.util.jar.JarFile;
 
 import org.gradle.api.Action;
 import org.gradle.api.JavaVersion;
-import org.gradle.api.artifacts.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BootJarTests extends AbstractBootArchiveTests<BootJar> {
 
 	BootJarTests() {
-		super(BootJar.class, "org.springframework.boot.loader.JarLauncher", "BOOT-INF/lib/", "BOOT-INF/classes/",
+		super(BootJar.class, "org.springframework.boot.loader.launch.JarLauncher", "BOOT-INF/lib/", "BOOT-INF/classes/",
 				"BOOT-INF/");
 	}
 
@@ -215,11 +214,6 @@ class BootJarTests extends AbstractBootArchiveTests<BootJar> {
 	@Override
 	void applyLayered(Action<LayeredSpec> action) {
 		getTask().layered(action);
-	}
-
-	@Override
-	void populateResolvedDependencies(Configuration configuration) {
-		getTask().getResolvedDependencies().processConfiguration(getTask().getProject(), configuration);
 	}
 
 	@Override

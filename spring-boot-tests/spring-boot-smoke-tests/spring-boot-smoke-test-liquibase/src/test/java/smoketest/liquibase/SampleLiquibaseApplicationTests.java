@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,11 +58,9 @@ class SampleLiquibaseApplicationTests {
 		assertThat(output).contains("Successfully acquired change log lock")
 			.contains("Creating database history table with name: PUBLIC.DATABASECHANGELOG")
 			.contains("Table person created")
-			.contains("ChangeSet classpath:/db/changelog/db.changelog-master.yaml::1::"
-					+ "marceloverdijk ran successfully")
+			.contains("ChangeSet db/changelog/db.changelog-master.yaml::1::" + "marceloverdijk ran successfully")
 			.contains("New row inserted into person")
-			.contains("ChangeSet classpath:/db/changelog/"
-					+ "db.changelog-master.yaml::2::marceloverdijk ran successfully")
+			.contains("ChangeSet db/changelog/" + "db.changelog-master.yaml::2::marceloverdijk ran successfully")
 			.contains("Successfully released change log lock");
 	}
 
@@ -71,9 +69,7 @@ class SampleLiquibaseApplicationTests {
 		};
 		if (nested.contains(ConnectException.class)) {
 			Throwable root = nested.getRootCause();
-			if (root.getMessage().contains("Connection refused")) {
-				return true;
-			}
+			return root.getMessage().contains("Connection refused");
 		}
 		return false;
 	}

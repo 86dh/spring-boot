@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,10 @@ import org.springframework.boot.actuate.autoconfigure.metrics.export.properties.
  *
  * @author Jon Schneider
  * @since 2.0.0
+ * @deprecated since 3.5.0 for removal in 3.7.0
  */
+@Deprecated(since = "3.5.0", forRemoval = true)
+@SuppressWarnings("removal")
 public class SignalFxPropertiesConfigAdapter extends StepRegistryPropertiesConfigAdapter<SignalFxProperties>
 		implements SignalFxConfig {
 
@@ -52,6 +55,24 @@ public class SignalFxPropertiesConfigAdapter extends StepRegistryPropertiesConfi
 	@Override
 	public String source() {
 		return get(SignalFxProperties::getSource, SignalFxConfig.super::source);
+	}
+
+	@Override
+	public boolean publishCumulativeHistogram() {
+		return get(this::isPublishCumulativeHistogram, SignalFxConfig.super::publishCumulativeHistogram);
+	}
+
+	private boolean isPublishCumulativeHistogram(SignalFxProperties properties) {
+		return SignalFxProperties.HistogramType.CUMULATIVE == properties.getPublishedHistogramType();
+	}
+
+	@Override
+	public boolean publishDeltaHistogram() {
+		return get(this::isPublishDeltaHistogram, SignalFxConfig.super::publishDeltaHistogram);
+	}
+
+	private boolean isPublishDeltaHistogram(SignalFxProperties properties) {
+		return SignalFxProperties.HistogramType.DELTA == properties.getPublishedHistogramType();
 	}
 
 }

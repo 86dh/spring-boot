@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import org.springframework.boot.actuate.logging.LoggersEndpoint.LoggersDescripto
 import org.springframework.boot.actuate.logging.LoggersEndpoint.SingleLoggerLevelsDescriptor;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.logging.LoggerConfiguration;
+import org.springframework.boot.logging.LoggerConfiguration.LevelConfiguration;
 import org.springframework.boot.logging.LoggerGroups;
 import org.springframework.boot.logging.LoggingSystem;
 
@@ -113,6 +114,17 @@ class LoggersEndpointTests {
 		assertThat(levels.getEffectiveLevel()).isEqualTo("DEBUG");
 	}
 
+	@Test // gh-35227
+	void loggerLevelsWhenCustomLevelShouldReturnLevels() {
+		given(this.loggingSystem.getLoggerConfiguration("ROOT"))
+			.willReturn(new LoggerConfiguration("ROOT", null, LevelConfiguration.ofCustom("FINEST")));
+		SingleLoggerLevelsDescriptor levels = (SingleLoggerLevelsDescriptor) new LoggersEndpoint(this.loggingSystem,
+				this.loggerGroups)
+			.loggerLevels("ROOT");
+		assertThat(levels.getConfiguredLevel()).isNull();
+		assertThat(levels.getEffectiveLevel()).isEqualTo("FINEST");
+	}
+
 	@Test
 	void groupNameSpecifiedShouldReturnConfiguredLevelAndMembers() {
 		GroupLoggerLevelsDescriptor levels = (GroupLoggerLevelsDescriptor) new LoggersEndpoint(this.loggingSystem,
@@ -152,13 +164,17 @@ class LoggersEndpointTests {
 		new ReflectiveRuntimeHintsRegistrar().registerRuntimeHints(runtimeHints, LoggersEndpoint.class);
 		ReflectionHintsPredicates reflection = RuntimeHintsPredicates.reflection();
 		assertThat(reflection.onType(LoggerLevelsDescriptor.class)).accepts(runtimeHints);
-		assertThat(reflection.onMethod(LoggerLevelsDescriptor.class, "getConfiguredLevel")).accepts(runtimeHints);
+		assertThat(reflection.onMethod(LoggerLevelsDescriptor.class, "getConfiguredLevel").invoke())
+			.accepts(runtimeHints);
 		assertThat(reflection.onType(SingleLoggerLevelsDescriptor.class)).accepts(runtimeHints);
-		assertThat(reflection.onMethod(SingleLoggerLevelsDescriptor.class, "getEffectiveLevel")).accepts(runtimeHints);
-		assertThat(reflection.onMethod(SingleLoggerLevelsDescriptor.class, "getConfiguredLevel")).accepts(runtimeHints);
+		assertThat(reflection.onMethod(SingleLoggerLevelsDescriptor.class, "getEffectiveLevel").invoke())
+			.accepts(runtimeHints);
+		assertThat(reflection.onMethod(SingleLoggerLevelsDescriptor.class, "getConfiguredLevel").invoke())
+			.accepts(runtimeHints);
 		assertThat(reflection.onType(GroupLoggerLevelsDescriptor.class)).accepts(runtimeHints);
-		assertThat(reflection.onMethod(GroupLoggerLevelsDescriptor.class, "getMembers")).accepts(runtimeHints);
-		assertThat(reflection.onMethod(GroupLoggerLevelsDescriptor.class, "getConfiguredLevel")).accepts(runtimeHints);
+		assertThat(reflection.onMethod(GroupLoggerLevelsDescriptor.class, "getMembers").invoke()).accepts(runtimeHints);
+		assertThat(reflection.onMethod(GroupLoggerLevelsDescriptor.class, "getConfiguredLevel").invoke())
+			.accepts(runtimeHints);
 	}
 
 }

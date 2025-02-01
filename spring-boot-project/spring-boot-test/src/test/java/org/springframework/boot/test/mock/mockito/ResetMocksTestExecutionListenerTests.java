@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,10 @@ import static org.mockito.Mockito.mock;
  *
  * @author Phillip Webb
  * @author Andy Wilkinson
+ * @deprecated since 3.4.0 for removal in 3.6.0
  */
+@SuppressWarnings("removal")
+@Deprecated(since = "3.4.0", forRemoval = true)
 @ExtendWith(SpringExtension.class)
 @TestMethodOrder(MethodOrderer.MethodName.class)
 class ResetMocksTestExecutionListenerTests {
@@ -47,12 +50,17 @@ class ResetMocksTestExecutionListenerTests {
 	@Autowired
 	private ApplicationContext context;
 
+	@SpyBean
+	ToSpy spied;
+
 	@Test
 	void test001() {
 		given(getMock("none").greeting()).willReturn("none");
 		given(getMock("before").greeting()).willReturn("before");
 		given(getMock("after").greeting()).willReturn("after");
 		given(getMock("fromFactoryBean").greeting()).willReturn("fromFactoryBean");
+		assertThat(this.context.getBean(NonSingletonFactoryBean.class).getObjectInvocations).isEqualTo(0);
+		given(this.spied.action()).willReturn("spied");
 	}
 
 	@Test
@@ -61,6 +69,8 @@ class ResetMocksTestExecutionListenerTests {
 		assertThat(getMock("before").greeting()).isNull();
 		assertThat(getMock("after").greeting()).isNull();
 		assertThat(getMock("fromFactoryBean").greeting()).isNull();
+		assertThat(this.context.getBean(NonSingletonFactoryBean.class).getObjectInvocations).isEqualTo(0);
+		assertThat(this.spied.action()).isNull();
 	}
 
 	ExampleService getMock(String name) {
@@ -109,6 +119,16 @@ class ResetMocksTestExecutionListenerTests {
 			return new WorkingFactoryBean();
 		}
 
+		@Bean
+		NonSingletonFactoryBean nonSingletonFactoryBean() {
+			return new NonSingletonFactoryBean();
+		}
+
+		@Bean
+		ToSpyFactoryBean toSpyFactoryBean() {
+			return new ToSpyFactoryBean();
+		}
+
 	}
 
 	static class BrokenFactoryBean implements FactoryBean<String> {
@@ -132,9 +152,11 @@ class ResetMocksTestExecutionListenerTests {
 
 	static class WorkingFactoryBean implements FactoryBean<ExampleService> {
 
+		private final ExampleService service = mock(ExampleService.class, MockReset.before());
+
 		@Override
 		public ExampleService getObject() {
-			return mock(ExampleService.class, MockReset.before());
+			return this.service;
 		}
 
 		@Override
@@ -145,6 +167,50 @@ class ResetMocksTestExecutionListenerTests {
 		@Override
 		public boolean isSingleton() {
 			return true;
+		}
+
+	}
+
+	static class ToSpy {
+
+		String action() {
+			return null;
+		}
+
+	}
+
+	static class NonSingletonFactoryBean implements FactoryBean<ExampleService> {
+
+		private int getObjectInvocations = 0;
+
+		@Override
+		public ExampleService getObject() {
+			this.getObjectInvocations++;
+			return mock(ExampleService.class, MockReset.before());
+		}
+
+		@Override
+		public Class<?> getObjectType() {
+			return ExampleService.class;
+		}
+
+		@Override
+		public boolean isSingleton() {
+			return false;
+		}
+
+	}
+
+	static class ToSpyFactoryBean implements FactoryBean<ToSpy> {
+
+		@Override
+		public ToSpy getObject() throws Exception {
+			return new ToSpy();
+		}
+
+		@Override
+		public Class<?> getObjectType() {
+			return ToSpy.class;
 		}
 
 	}

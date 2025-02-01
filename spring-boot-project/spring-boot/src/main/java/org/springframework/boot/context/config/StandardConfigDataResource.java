@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 
 package org.springframework.boot.context.config;
 
+import java.io.File;
 import java.io.IOException;
 
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.FileUrlResource;
 import org.springframework.core.io.Resource;
@@ -54,8 +56,8 @@ public class StandardConfigDataResource extends ConfigDataResource {
 	 * @param emptyDirectory if the resource is an empty directory that we know exists
 	 */
 	StandardConfigDataResource(StandardConfigDataReference reference, Resource resource, boolean emptyDirectory) {
-		Assert.notNull(reference, "Reference must not be null");
-		Assert.notNull(resource, "Resource must not be null");
+		Assert.notNull(reference, "'reference' must not be null");
+		Assert.notNull(resource, "'resource' must not be null");
 		this.reference = reference;
 		this.resource = resource;
 		this.emptyDirectory = emptyDirectory;
@@ -96,24 +98,47 @@ public class StandardConfigDataResource extends ConfigDataResource {
 			return false;
 		}
 		StandardConfigDataResource other = (StandardConfigDataResource) obj;
-		return this.resource.equals(other.resource) && this.emptyDirectory == other.emptyDirectory;
+		return (this.emptyDirectory == other.emptyDirectory) && isSameUnderlyingResource(this.resource, other.resource);
+	}
+
+	private boolean isSameUnderlyingResource(Resource ours, Resource other) {
+		return ours.equals(other) || isSameFile(getUnderlyingFile(ours), getUnderlyingFile(other));
+	}
+
+	private boolean isSameFile(File ours, File other) {
+		return (ours != null) && ours.equals(other);
 	}
 
 	@Override
 	public int hashCode() {
-		return this.resource.hashCode();
+		File underlyingFile = getUnderlyingFile(this.resource);
+		return (underlyingFile != null) ? underlyingFile.hashCode() : this.resource.hashCode();
 	}
 
 	@Override
 	public String toString() {
 		if (this.resource instanceof FileSystemResource || this.resource instanceof FileUrlResource) {
 			try {
-				return "file [" + this.resource.getFile().toString() + "]";
+				return "file [" + this.resource.getFile() + "]";
 			}
 			catch (IOException ex) {
+				// Ignore
 			}
 		}
 		return this.resource.toString();
+	}
+
+	private File getUnderlyingFile(Resource resource) {
+		try {
+			if (resource instanceof ClassPathResource || resource instanceof FileSystemResource
+					|| resource instanceof FileUrlResource) {
+				return resource.getFile().getAbsoluteFile();
+			}
+		}
+		catch (IOException ex) {
+			// Ignore
+		}
+		return null;
 	}
 
 }

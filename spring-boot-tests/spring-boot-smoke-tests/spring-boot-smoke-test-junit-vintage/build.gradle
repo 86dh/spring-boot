@@ -1,6 +1,5 @@
 plugins {
 	id "java"
-	id "org.springframework.boot.conventions"
 }
 
 description = "Spring Boot JUnit Vintage smoke test"
@@ -21,6 +20,11 @@ test {
 					throw new GradleException("No tests were executed")
 				}
 			}
-	 	}
+		}
+	}
+	develocity {
+		predictiveTestSelection {
+			enabled = false
+		}
 	}
 }

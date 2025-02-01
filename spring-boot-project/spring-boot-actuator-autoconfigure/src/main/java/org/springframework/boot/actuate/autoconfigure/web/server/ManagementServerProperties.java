@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,6 +56,8 @@ public class ManagementServerProperties {
 
 	@NestedConfigurationProperty
 	private Ssl ssl;
+
+	private final Accesslog accesslog = new Accesslog();
 
 	/**
 	 * Returns the management port or {@code null} if the
@@ -115,6 +117,27 @@ public class ManagementServerProperties {
 			}
 		}
 		return candidate;
+	}
+
+	public Accesslog getAccesslog() {
+		return this.accesslog;
+	}
+
+	public static class Accesslog {
+
+		/**
+		 * Management log file name prefix.
+		 */
+		private String prefix = "management_";
+
+		public String getPrefix() {
+			return this.prefix;
+		}
+
+		public void setPrefix(String prefix) {
+			this.prefix = prefix;
+		}
+
 	}
 
 }

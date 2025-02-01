@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Configuration properties for tracing.
  *
  * @author Moritz Halbritter
+ * @author Jonatan Ivanov
  * @since 3.0.0
  */
 @ConfigurationProperties("management.tracing")
 public class TracingProperties {
-
-	/**
-	 * Whether auto-configuration of tracing is enabled.
-	 */
-	private boolean enabled = true;
 
 	/**
 	 * Sampling configuration.
@@ -50,13 +46,10 @@ public class TracingProperties {
 	 */
 	private final Propagation propagation = new Propagation();
 
-	public boolean isEnabled() {
-		return this.enabled;
-	}
-
-	public void setEnabled(boolean enabled) {
-		this.enabled = enabled;
-	}
+	/**
+	 * Brave configuration.
+	 */
+	private final Brave brave = new Brave();
 
 	public Sampling getSampling() {
 		return this.sampling;
@@ -68,6 +61,10 @@ public class TracingProperties {
 
 	public Propagation getPropagation() {
 		return this.propagation;
+	}
+
+	public Brave getBrave() {
+		return this.brave;
 	}
 
 	public static class Sampling {
@@ -106,6 +103,17 @@ public class TracingProperties {
 		 */
 		private List<String> remoteFields = new ArrayList<>();
 
+		/**
+		 * List of fields that should be accessible within the JVM process but not
+		 * propagated over the wire. Local fields are not supported with OpenTelemetry.
+		 */
+		private List<String> localFields = new ArrayList<>();
+
+		/**
+		 * List of fields that should automatically become tags.
+		 */
+		private List<String> tagFields = new ArrayList<>();
+
 		public boolean isEnabled() {
 			return this.enabled;
 		}
@@ -126,8 +134,24 @@ public class TracingProperties {
 			return this.remoteFields;
 		}
 
+		public List<String> getLocalFields() {
+			return this.localFields;
+		}
+
+		public List<String> getTagFields() {
+			return this.tagFields;
+		}
+
 		public void setRemoteFields(List<String> remoteFields) {
 			this.remoteFields = remoteFields;
+		}
+
+		public void setLocalFields(List<String> localFields) {
+			this.localFields = localFields;
+		}
+
+		public void setTagFields(List<String> tagFields) {
+			this.tagFields = tagFields;
 		}
 
 		public static class Correlation {
@@ -166,30 +190,105 @@ public class TracingProperties {
 	public static class Propagation {
 
 		/**
-		 * Tracing context propagation type.
+		 * Tracing context propagation types produced and consumed by the application.
+		 * Setting this property overrides the more fine-grained propagation type
+		 * properties.
 		 */
-		private PropagationType type = PropagationType.W3C;
+		private List<PropagationType> type;
 
-		public PropagationType getType() {
-			return this.type;
-		}
+		/**
+		 * Tracing context propagation types produced by the application.
+		 */
+		private List<PropagationType> produce = List.of(PropagationType.W3C);
 
-		public void setType(PropagationType type) {
+		/**
+		 * Tracing context propagation types consumed by the application.
+		 */
+		private List<PropagationType> consume = List.of(PropagationType.values());
+
+		public void setType(List<PropagationType> type) {
 			this.type = type;
 		}
 
-		enum PropagationType {
+		public void setProduce(List<PropagationType> produce) {
+			this.produce = produce;
+		}
+
+		public void setConsume(List<PropagationType> consume) {
+			this.consume = consume;
+		}
+
+		public List<PropagationType> getType() {
+			return this.type;
+		}
+
+		public List<PropagationType> getProduce() {
+			return this.produce;
+		}
+
+		public List<PropagationType> getConsume() {
+			return this.consume;
+		}
+
+		/**
+		 * Returns the effective context propagation types produced by the application.
+		 * This will be {@link #getType()} if set or {@link #getProduce()} otherwise.
+		 * @return the effective context propagation types produced by the application
+		 */
+		List<PropagationType> getEffectiveProducedTypes() {
+			return (this.type != null) ? this.type : this.produce;
+		}
+
+		/**
+		 * Returns the effective context propagation types consumed by the application.
+		 * This will be {@link #getType()} if set or {@link #getConsume()} otherwise.
+		 * @return the effective context propagation types consumed by the application
+		 */
+		List<PropagationType> getEffectiveConsumedTypes() {
+			return (this.type != null) ? this.type : this.consume;
+		}
+
+		/**
+		 * Supported propagation types. The declared order of the values matter.
+		 */
+		public enum PropagationType {
 
 			/**
-			 * B3 propagation type.
+			 * <a href="https://www.w3.org/TR/trace-context/">W3C</a> propagation.
+			 */
+			W3C,
+
+			/**
+			 * <a href="https://github.com/openzipkin/b3-propagation#single-header">B3
+			 * single header</a> propagation.
 			 */
 			B3,
 
 			/**
-			 * W3C propagation type.
+			 * <a href="https://github.com/openzipkin/b3-propagation#multiple-headers">B3
+			 * multiple headers</a> propagation.
 			 */
-			W3C
+			B3_MULTI
 
+		}
+
+	}
+
+	public static class Brave {
+
+		/**
+		 * Whether the propagation type and tracing backend support sharing the span ID
+		 * between client and server spans. Requires B3 propagation and a compatible
+		 * backend.
+		 */
+		private boolean spanJoiningSupported = false;
+
+		public boolean isSpanJoiningSupported() {
+			return this.spanJoiningSupported;
+		}
+
+		public void setSpanJoiningSupported(boolean spanJoiningSupported) {
+			this.spanJoiningSupported = spanJoiningSupported;
 		}
 
 	}

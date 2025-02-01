@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,11 +87,11 @@ public class PrometheusPushGatewayManager {
 	 */
 	public PrometheusPushGatewayManager(PushGateway pushGateway, CollectorRegistry registry, TaskScheduler scheduler,
 			Duration pushRate, String job, Map<String, String> groupingKey, ShutdownOperation shutdownOperation) {
-		Assert.notNull(pushGateway, "PushGateway must not be null");
-		Assert.notNull(registry, "Registry must not be null");
-		Assert.notNull(scheduler, "Scheduler must not be null");
-		Assert.notNull(pushRate, "PushRate must not be null");
-		Assert.hasLength(job, "Job must not be empty");
+		Assert.notNull(pushGateway, "'pushGateway' must not be null");
+		Assert.notNull(registry, "'registry' must not be null");
+		Assert.notNull(scheduler, "'scheduler' must not be null");
+		Assert.notNull(pushRate, "'pushRate' must not be null");
+		Assert.hasLength(job, "'job' must not be empty");
 		this.pushGateway = pushGateway;
 		this.registry = registry;
 		this.job = job;
@@ -141,7 +141,7 @@ public class PrometheusPushGatewayManager {
 		}
 		this.scheduled.cancel(false);
 		switch (shutdownOperation) {
-			case PUSH, POST -> post();
+			case POST -> post();
 			case PUT -> put();
 			case DELETE -> delete();
 		}
@@ -161,13 +161,6 @@ public class PrometheusPushGatewayManager {
 		 * Perform a POST before shutdown.
 		 */
 		POST,
-
-		/**
-		 * Perform a POST before shutdown.
-		 * @deprecated since 3.0.0 for removal in 3.2.0 in favor of {@link #POST}.
-		 */
-		@Deprecated(since = "3.0.0", forRemoval = true)
-		PUSH,
 
 		/**
 		 * Perform a PUT before shutdown.

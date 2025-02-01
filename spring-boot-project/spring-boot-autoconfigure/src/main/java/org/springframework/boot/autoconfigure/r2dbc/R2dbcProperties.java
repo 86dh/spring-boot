@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @author Rodolpho S. Couto
  * @since 2.3.0
  */
-@ConfigurationProperties(prefix = "spring.r2dbc")
+@ConfigurationProperties("spring.r2dbc")
 public class R2dbcProperties {
 
 	/**
@@ -137,6 +137,11 @@ public class R2dbcProperties {
 	public static class Pool {
 
 		/**
+		 * Minimal number of idle connections.
+		 */
+		private int minIdle = 0;
+
+		/**
 		 * Maximum amount of time that a connection is allowed to sit idle in the pool.
 		 */
 		private Duration maxIdleTime = Duration.ofMinutes(30);
@@ -152,6 +157,17 @@ public class R2dbcProperties {
 		 * indefinitely.
 		 */
 		private Duration maxAcquireTime;
+
+		/**
+		 * Number of acquire retries if the first acquire attempt fails.
+		 */
+		private int acquireRetry = 1;
+
+		/**
+		 * Maximum time to validate a connection from the pool. By default, wait
+		 * indefinitely.
+		 */
+		private Duration maxValidationTime;
 
 		/**
 		 * Maximum time to wait to create a new connection. By default, wait indefinitely.
@@ -183,6 +199,14 @@ public class R2dbcProperties {
 		 */
 		private boolean enabled = true;
 
+		public int getMinIdle() {
+			return this.minIdle;
+		}
+
+		public void setMinIdle(int minIdle) {
+			this.minIdle = minIdle;
+		}
+
 		public Duration getMaxIdleTime() {
 			return this.maxIdleTime;
 		}
@@ -199,12 +223,28 @@ public class R2dbcProperties {
 			this.maxLifeTime = maxLifeTime;
 		}
 
+		public Duration getMaxValidationTime() {
+			return this.maxValidationTime;
+		}
+
+		public void setMaxValidationTime(Duration maxValidationTime) {
+			this.maxValidationTime = maxValidationTime;
+		}
+
 		public Duration getMaxAcquireTime() {
 			return this.maxAcquireTime;
 		}
 
 		public void setMaxAcquireTime(Duration maxAcquireTime) {
 			this.maxAcquireTime = maxAcquireTime;
+		}
+
+		public int getAcquireRetry() {
+			return this.acquireRetry;
+		}
+
+		public void setAcquireRetry(int acquireRetry) {
+			this.acquireRetry = acquireRetry;
 		}
 
 		public Duration getMaxCreateConnectionTime() {

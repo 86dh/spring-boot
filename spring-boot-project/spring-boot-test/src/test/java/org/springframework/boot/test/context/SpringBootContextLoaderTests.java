@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,12 +26,14 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.BeanCreationException;
+import org.springframework.boot.ApplicationContextFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.test.context.SpringBootTest.UseMainMethod;
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.boot.web.reactive.context.GenericReactiveWebApplicationContext;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -58,6 +60,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  * @author Stephane Nicoll
  * @author Scott Frederick
  * @author Madhura Bhave
+ * @author Sijun Yang
  */
 class SpringBootContextLoaderTests {
 
@@ -125,11 +128,6 @@ class SpringBootContextLoaderTests {
 		assertThat(getActiveProfiles(MultipleActiveProfiles.class)).containsExactly("profile1", "profile2");
 	}
 
-	@Test
-	void activeProfileWithComma() {
-		assertThat(getActiveProfiles(ActiveProfileWithComma.class)).containsExactly("profile1,2");
-	}
-
 	@Test // gh-28776
 	void testPropertyValuesShouldTakePrecedenceWhenInlinedPropertiesPresent() {
 		TestContext context = new ExposedTestContextManager(SimpleConfig.class).getExposedTestContext();
@@ -158,11 +156,11 @@ class SpringBootContextLoaderTests {
 			.stream()
 			.map(PropertySource::getName)
 			.collect(Collectors.toCollection(ArrayList::new));
-		String last = names.remove(names.size() - 1);
+		String configResource = names.remove(names.size() - 2);
 		assertThat(names).containsExactly("configurationProperties", "Inlined Test Properties", "commandLineArgs",
 				"servletConfigInitParams", "servletContextInitParams", "systemProperties", "systemEnvironment",
-				"random");
-		assertThat(last).startsWith("Config resource");
+				"random", "applicationInfo");
+		assertThat(configResource).startsWith("Config resource");
 	}
 
 	@Test
@@ -246,6 +244,13 @@ class SpringBootContextLoaderTests {
 			.withMessage("UseMainMethod.ALWAYS cannot be used with @ContextHierarchy tests");
 	}
 
+	@Test
+	void whenSubclassProvidesCustomApplicationContextFactory() {
+		TestContext testContext = new ExposedTestContextManager(CustomApplicationContextTest.class)
+			.getExposedTestContext();
+		assertThat(testContext.getApplicationContext()).isInstanceOf(CustomAnnotationConfigApplicationContext.class);
+	}
+
 	private String[] getActiveProfiles(Class<?> testClass) {
 		TestContext testContext = new ExposedTestContextManager(testClass).getExposedTestContext();
 		ApplicationContext applicationContext = testContext.getApplicationContext();
@@ -255,7 +260,7 @@ class SpringBootContextLoaderTests {
 	private Map<String, Object> getMergedContextConfigurationProperties(Class<?> testClass) {
 		TestContext context = new ExposedTestContextManager(testClass).getExposedTestContext();
 		MergedContextConfiguration config = (MergedContextConfiguration) ReflectionTestUtils.getField(context,
-				"mergedContextConfiguration");
+				"mergedConfig");
 		return TestPropertySourceUtils.convertInlinedPropertiesToMap(config.getPropertySourceProperties());
 	}
 
@@ -305,14 +310,8 @@ class SpringBootContextLoaderTests {
 
 	}
 
-	@SpringBootTest(classes = Config.class)
-	@ActiveProfiles({ "profile1,2" })
-	static class ActiveProfileWithComma {
-
-	}
-
 	@SpringBootTest(properties = { "key=myValue" }, classes = Config.class)
-	@ActiveProfiles({ "profile1,2" })
+	@ActiveProfiles({ "profile1" })
 	static class ActiveProfileWithInlinedProperties {
 
 	}
@@ -367,6 +366,25 @@ class SpringBootContextLoaderTests {
 	@ContextHierarchy({ @ContextConfiguration(classes = ConfigWithMain.class),
 			@ContextConfiguration(classes = AnotherConfigWithMain.class) })
 	static class UseMainMethodWithContextHierarchy {
+
+	}
+
+	@SpringBootTest
+	@ContextConfiguration(classes = Config.class, loader = CustomApplicationContextSpringBootContextLoader.class)
+	static class CustomApplicationContextTest {
+
+	}
+
+	static class CustomApplicationContextSpringBootContextLoader extends SpringBootContextLoader {
+
+		@Override
+		protected ApplicationContextFactory getApplicationContextFactory(MergedContextConfiguration mergedConfig) {
+			return (webApplicationType) -> new CustomAnnotationConfigApplicationContext();
+		}
+
+	}
+
+	static class CustomAnnotationConfigApplicationContext extends AnnotationConfigApplicationContext {
 
 	}
 
@@ -446,7 +464,8 @@ class SpringBootContextLoaderTests {
 
 	}
 
-	private static class ContextLoaderApplicationContextFailureProcessor implements ApplicationContextFailureProcessor {
+	private static final class ContextLoaderApplicationContextFailureProcessor
+			implements ApplicationContextFailureProcessor {
 
 		static ApplicationContext failedContext;
 

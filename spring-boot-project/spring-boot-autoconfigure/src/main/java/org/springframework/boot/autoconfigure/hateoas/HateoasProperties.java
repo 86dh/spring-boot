@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ package org.springframework.boot.autoconfigure.hateoas;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * {@link ConfigurationProperties properties} for Spring HATEOAS.
+ * {@link ConfigurationProperties Properties} for Spring HATEOAS.
  *
  * @author Phillip Webb
  * @author Andy Wilkinson
  * @since 1.2.1
  */
-@ConfigurationProperties(prefix = "spring.hateoas")
+@ConfigurationProperties("spring.hateoas")
 public class HateoasProperties {
 
 	/**
@@ -34,7 +34,7 @@ public class HateoasProperties {
 	 */
 	private boolean useHalAsDefaultJsonMediaType = true;
 
-	public boolean getUseHalAsDefaultJsonMediaType() {
+	public boolean isUseHalAsDefaultJsonMediaType() {
 		return this.useHalAsDefaultJsonMediaType;
 	}
 

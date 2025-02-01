@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.jdbc.init;
 
+import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -26,6 +27,7 @@ import java.util.function.Supplier;
 import javax.sql.DataSource;
 
 import org.springframework.boot.jdbc.DatabaseDriver;
+import org.springframework.jdbc.support.JdbcUtils;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
@@ -89,10 +91,9 @@ public class PlatformPlaceholderDatabaseDriverResolver {
 	 * @param dataSource the DataSource from which the {@link DatabaseDriver} is derived
 	 * @param values the values in which placeholders are resolved
 	 * @return the values with their placeholders resolved
-	 * @see DatabaseDriver#fromDataSource(DataSource)
 	 */
 	public List<String> resolveAll(DataSource dataSource, String... values) {
-		Assert.notNull(dataSource, "DataSource must not be null");
+		Assert.notNull(dataSource, "'dataSource' must not be null");
 		return resolveAll(() -> determinePlatform(dataSource), values);
 	}
 
@@ -105,7 +106,7 @@ public class PlatformPlaceholderDatabaseDriverResolver {
 	 * @since 2.6.2
 	 */
 	public List<String> resolveAll(String platform, String... values) {
-		Assert.notNull(platform, "Platform must not be null");
+		Assert.notNull(platform, "'platform' must not be null");
 		return resolveAll(() -> platform, values);
 	}
 
@@ -134,7 +135,14 @@ public class PlatformPlaceholderDatabaseDriverResolver {
 	}
 
 	DatabaseDriver getDatabaseDriver(DataSource dataSource) {
-		return DatabaseDriver.fromDataSource(dataSource);
+		try {
+			String productName = JdbcUtils.commonDatabaseName(
+					JdbcUtils.extractDatabaseMetaData(dataSource, DatabaseMetaData::getDatabaseProductName));
+			return DatabaseDriver.fromProductName(productName);
+		}
+		catch (Exception ex) {
+			throw new IllegalStateException("Failed to determine DatabaseDriver", ex);
+		}
 	}
 
 }

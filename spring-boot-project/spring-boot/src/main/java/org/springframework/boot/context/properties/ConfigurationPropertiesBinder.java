@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.env.PropertySources;
 import org.springframework.util.Assert;
+import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 import org.springframework.validation.annotation.Validated;
 
@@ -75,7 +76,7 @@ class ConfigurationPropertiesBinder {
 
 	private final boolean jsr303Present;
 
-	private volatile Validator jsr303Validator;
+	private volatile List<ConfigurationPropertiesBindHandlerAdvisor> bindHandlerAdvisors;
 
 	private volatile Binder binder;
 
@@ -127,6 +128,18 @@ class ConfigurationPropertiesBinder {
 		return handler;
 	}
 
+	private List<ConfigurationPropertiesBindHandlerAdvisor> getBindHandlerAdvisors() {
+		List<ConfigurationPropertiesBindHandlerAdvisor> bindHandlerAdvisors = this.bindHandlerAdvisors;
+		if (bindHandlerAdvisors == null) {
+			bindHandlerAdvisors = this.applicationContext
+				.getBeanProvider(ConfigurationPropertiesBindHandlerAdvisor.class)
+				.orderedStream()
+				.toList();
+			this.bindHandlerAdvisors = bindHandlerAdvisors;
+		}
+		return bindHandlerAdvisors;
+	}
+
 	private IgnoreTopLevelConverterNotFoundBindHandler getHandler() {
 		BoundConfigurationProperties bound = BoundConfigurationProperties.get(this.applicationContext);
 		return (bound != null)
@@ -140,25 +153,29 @@ class ConfigurationPropertiesBinder {
 			validators.add(this.configurationPropertiesValidator);
 		}
 		if (this.jsr303Present && target.getAnnotation(Validated.class) != null) {
-			validators.add(getJsr303Validator());
+			validators.add(getJsr303Validator(target.getType().resolve()));
 		}
-		if (target.getValue() != null && target.getValue().get() instanceof Validator validator) {
-			validators.add(validator);
+		Validator selfValidator = getSelfValidator(target);
+		if (selfValidator != null) {
+			validators.add(selfValidator);
 		}
 		return validators;
 	}
 
-	private Validator getJsr303Validator() {
-		if (this.jsr303Validator == null) {
-			this.jsr303Validator = new ConfigurationPropertiesJsr303Validator(this.applicationContext);
+	private Validator getSelfValidator(Bindable<?> target) {
+		if (target.getValue() != null) {
+			Object value = target.getValue().get();
+			return (value instanceof Validator validator) ? validator : null;
 		}
-		return this.jsr303Validator;
+		Class<?> type = target.getType().resolve();
+		if (type != null && Validator.class.isAssignableFrom(type)) {
+			return new SelfValidatingConstructorBoundBindableValidator(type);
+		}
+		return null;
 	}
 
-	private List<ConfigurationPropertiesBindHandlerAdvisor> getBindHandlerAdvisors() {
-		return this.applicationContext.getBeanProvider(ConfigurationPropertiesBindHandlerAdvisor.class)
-			.orderedStream()
-			.toList();
+	private Validator getJsr303Validator(Class<?> type) {
+		return new ConfigurationPropertiesJsr303Validator(this.applicationContext, type);
 	}
 
 	private Binder getBinder() {
@@ -194,7 +211,7 @@ class ConfigurationPropertiesBinder {
 				.rootBeanDefinition(ConfigurationPropertiesBinderFactory.class)
 				.getBeanDefinition();
 			definition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
-			registry.registerBeanDefinition(ConfigurationPropertiesBinder.BEAN_NAME, definition);
+			registry.registerBeanDefinition(BEAN_NAME, definition);
 		}
 	}
 
@@ -246,6 +263,30 @@ class ConfigurationPropertiesBinder {
 		public ConfigurationPropertiesBinder getObject() throws Exception {
 			Assert.state(this.binder != null, "Binder was not created due to missing setApplicationContext call");
 			return this.binder;
+		}
+
+	}
+
+	/**
+	 * A {@code Validator} for a constructor-bound {@code Bindable} where the type being
+	 * bound is itself a {@code Validator} implementation.
+	 */
+	static class SelfValidatingConstructorBoundBindableValidator implements Validator {
+
+		private final Class<?> type;
+
+		SelfValidatingConstructorBoundBindableValidator(Class<?> type) {
+			this.type = type;
+		}
+
+		@Override
+		public boolean supports(Class<?> candidate) {
+			return candidate.isAssignableFrom(this.type);
+		}
+
+		@Override
+		public void validate(Object target, Errors errors) {
+			((Validator) target).validate(target, errors);
 		}
 
 	}

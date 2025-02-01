@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.template.TemplateLocation;
@@ -38,7 +38,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.ImportRuntimeHints;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.core.log.LogMessage;
 import org.springframework.web.servlet.view.UrlBasedViewResolver;
@@ -60,7 +59,6 @@ import org.springframework.web.servlet.view.groovy.GroovyMarkupViewResolver;
 @AutoConfiguration(after = WebMvcAutoConfiguration.class)
 @ConditionalOnClass(MarkupTemplateEngine.class)
 @EnableConfigurationProperties(GroovyTemplateProperties.class)
-@ImportRuntimeHints(GroovyTemplateRuntimeHints.class)
 public class GroovyTemplateAutoConfiguration {
 
 	private static final Log logger = LogFactory.getLog(GroovyTemplateAutoConfiguration.class);
@@ -111,7 +109,7 @@ public class GroovyTemplateAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean(GroovyMarkupConfig.class)
-		@ConfigurationProperties(prefix = "spring.groovy.template.configuration")
+		@ConfigurationProperties("spring.groovy.template.configuration")
 		public GroovyMarkupConfigurer groovyMarkupConfigurer(ObjectProvider<MarkupTemplateEngine> templateEngine) {
 			GroovyMarkupConfigurer configurer = new GroovyMarkupConfigurer();
 			configurer.setResourceLoaderPath(this.properties.getResourceLoaderPath());
@@ -125,7 +123,7 @@ public class GroovyTemplateAutoConfiguration {
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnClass({ Servlet.class, LocaleContextHolder.class, UrlBasedViewResolver.class })
 	@ConditionalOnWebApplication(type = Type.SERVLET)
-	@ConditionalOnProperty(name = "spring.groovy.template.enabled", matchIfMissing = true)
+	@ConditionalOnBooleanProperty(name = "spring.groovy.template.enabled", matchIfMissing = true)
 	public static class GroovyWebConfiguration {
 
 		@Bean

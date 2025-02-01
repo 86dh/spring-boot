@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.springframework.boot.web.client;
 
-import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 
@@ -27,7 +26,8 @@ import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpRequest;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.ReactorClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +37,10 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  * Tests for {@link ClientHttpRequestFactories}.
  *
  * @author Andy Wilkinson
+ * @deprecated since 3.4.0 for removal in 3.6.0
  */
+@SuppressWarnings("removal")
+@Deprecated(since = "3.4.0", forRemoval = true)
 class ClientHttpRequestFactoriesTests {
 
 	@Test
@@ -69,10 +72,17 @@ class ClientHttpRequestFactoriesTests {
 	}
 
 	@Test
-	void getOfOkHttpFactoryReturnsOkHttpFactory() {
-		ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(OkHttp3ClientHttpRequestFactory.class,
+	void getOfReactorFactoryReturnsReactorFactory() {
+		ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(ReactorClientHttpRequestFactory.class,
 				ClientHttpRequestFactorySettings.DEFAULTS);
-		assertThat(requestFactory).isInstanceOf(OkHttp3ClientHttpRequestFactory.class);
+		assertThat(requestFactory).isInstanceOf(ReactorClientHttpRequestFactory.class);
+	}
+
+	@Test
+	void getOfJdkFactoryReturnsJdkFactory() {
+		ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(JdkClientHttpRequestFactory.class,
+				ClientHttpRequestFactorySettings.DEFAULTS);
+		assertThat(requestFactory).isInstanceOf(JdkClientHttpRequestFactory.class);
 	}
 
 	@Test
@@ -101,14 +111,6 @@ class ClientHttpRequestFactoriesTests {
 	}
 
 	@Test
-	void getOfUnknownTypeWithBodyBufferingCreatesFactoryAndConfiguresBodyBuffering() {
-		ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(TestClientHttpRequestFactory.class,
-				ClientHttpRequestFactorySettings.DEFAULTS.withBufferRequestBody(true));
-		assertThat(requestFactory).isInstanceOf(TestClientHttpRequestFactory.class);
-		assertThat(((TestClientHttpRequestFactory) requestFactory).bufferRequestBody).isTrue();
-	}
-
-	@Test
 	void getOfUnconfigurableTypeWithConnectTimeoutThrows() {
 		assertThatIllegalStateException()
 			.isThrownBy(() -> ClientHttpRequestFactories.get(UnconfigurableClientHttpRequestFactory.class,
@@ -125,14 +127,6 @@ class ClientHttpRequestFactoriesTests {
 	}
 
 	@Test
-	void getOfUnconfigurableTypeWithBodyBufferingThrows() {
-		assertThatIllegalStateException()
-			.isThrownBy(() -> ClientHttpRequestFactories.get(UnconfigurableClientHttpRequestFactory.class,
-					ClientHttpRequestFactorySettings.DEFAULTS.withBufferRequestBody(true)))
-			.withMessageContaining("suitable setBufferRequestBody method");
-	}
-
-	@Test
 	void getOfTypeWithDeprecatedConnectTimeoutThrowsWithConnectTimeout() {
 		assertThatIllegalStateException()
 			.isThrownBy(() -> ClientHttpRequestFactories.get(DeprecatedMethodsClientHttpRequestFactory.class,
@@ -146,14 +140,6 @@ class ClientHttpRequestFactoriesTests {
 			.isThrownBy(() -> ClientHttpRequestFactories.get(DeprecatedMethodsClientHttpRequestFactory.class,
 					ClientHttpRequestFactorySettings.DEFAULTS.withReadTimeout(Duration.ofSeconds(60))))
 			.withMessageContaining("setReadTimeout method marked as deprecated");
-	}
-
-	@Test
-	void getOfTypeWithDeprecatedBufferRequestBodyThrowsWithBufferRequestBody() {
-		assertThatIllegalStateException()
-			.isThrownBy(() -> ClientHttpRequestFactories.get(DeprecatedMethodsClientHttpRequestFactory.class,
-					ClientHttpRequestFactorySettings.DEFAULTS.withBufferRequestBody(false)))
-			.withMessageContaining("setBufferRequestBody method marked as deprecated");
 	}
 
 	@Test
@@ -177,14 +163,15 @@ class ClientHttpRequestFactoriesTests {
 	}
 
 	@Test
-	void bufferRequestBodyCanBeConfiguredOnAWrappedRequestFactory() {
-		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-		assertThat(requestFactory).hasFieldOrPropertyWithValue("bufferRequestBody", true);
-		BufferingClientHttpRequestFactory result = ClientHttpRequestFactories.get(
-				() -> new BufferingClientHttpRequestFactory(requestFactory),
-				ClientHttpRequestFactorySettings.DEFAULTS.withBufferRequestBody(false));
-		assertThat(result).extracting("requestFactory").isSameAs(requestFactory);
-		assertThat(requestFactory).hasFieldOrPropertyWithValue("bufferRequestBody", false);
+	void reflectiveShouldFavorDurationTimeoutMethods() {
+		IntAndDurationTimeoutsClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(
+				IntAndDurationTimeoutsClientHttpRequestFactory.class,
+				ClientHttpRequestFactorySettings.DEFAULTS.withConnectTimeout(Duration.ofSeconds(1))
+					.withReadTimeout(Duration.ofSeconds(2)));
+		assertThat((requestFactory).connectTimeout).isZero();
+		assertThat((requestFactory).readTimeout).isZero();
+		assertThat((requestFactory).connectTimeoutDuration).isEqualTo(Duration.ofSeconds(1));
+		assertThat((requestFactory).readTimeoutDuration).isEqualTo(Duration.ofSeconds(2));
 	}
 
 	public static class TestClientHttpRequestFactory implements ClientHttpRequestFactory {
@@ -193,10 +180,8 @@ class ClientHttpRequestFactoriesTests {
 
 		private int readTimeout;
 
-		private boolean bufferRequestBody;
-
 		@Override
-		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) throws IOException {
+		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -208,16 +193,12 @@ class ClientHttpRequestFactoriesTests {
 			this.readTimeout = timeout;
 		}
 
-		public void setBufferRequestBody(boolean bufferRequestBody) {
-			this.bufferRequestBody = bufferRequestBody;
-		}
-
 	}
 
 	public static class UnconfigurableClientHttpRequestFactory implements ClientHttpRequestFactory {
 
 		@Override
-		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) throws IOException {
+		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -226,7 +207,7 @@ class ClientHttpRequestFactoriesTests {
 	public static class DeprecatedMethodsClientHttpRequestFactory implements ClientHttpRequestFactory {
 
 		@Override
-		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) throws IOException {
+		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -240,6 +221,39 @@ class ClientHttpRequestFactoriesTests {
 
 		@Deprecated(since = "3.0.0", forRemoval = false)
 		public void setBufferRequestBody(boolean bufferRequestBody) {
+		}
+
+	}
+
+	public static class IntAndDurationTimeoutsClientHttpRequestFactory implements ClientHttpRequestFactory {
+
+		private int readTimeout;
+
+		private int connectTimeout;
+
+		private Duration readTimeoutDuration;
+
+		private Duration connectTimeoutDuration;
+
+		@Override
+		public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) {
+			throw new UnsupportedOperationException();
+		}
+
+		public void setConnectTimeout(int timeout) {
+			this.connectTimeout = timeout;
+		}
+
+		public void setReadTimeout(int timeout) {
+			this.readTimeout = timeout;
+		}
+
+		public void setConnectTimeout(Duration timeout) {
+			this.connectTimeoutDuration = timeout;
+		}
+
+		public void setReadTimeout(Duration timeout) {
+			this.readTimeoutDuration = timeout;
 		}
 
 	}
