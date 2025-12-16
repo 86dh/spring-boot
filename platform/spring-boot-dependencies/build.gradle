@@ -1671,11 +1671,7 @@ bom {
 			releaseNotes("https://github.com/neo4j/neo4j-java-driver/releases/tag/{version}")
 		}
 	}
-	library("Netty", "4.2.7.Final") {
-		prohibit {
-			versionRange "[4.2.8.Final]"
-			because "it contains a regression https://github.com/netty/netty/issues/16020"
-		}
+	library("Netty", "4.2.9.Final") {
 		prohibit {
 			contains ".Alpha"
 			contains ".Beta"
@@ -2372,7 +2368,7 @@ bom {
 			]
 		}
 	}
-	library("Spring AMQP", "4.0.1-SNAPSHOT") {
+	library("Spring AMQP", "4.0.1") {
 		considerSnapshots()
 		group("org.springframework.amqp") {
 			bom("spring-amqp-bom")
@@ -2482,7 +2478,7 @@ bom {
 			releaseNotes("https://github.com/spring-projects/spring-integration/releases/tag/v{version}")
 		}
 	}
-	library("Spring Kafka", "4.0.1-SNAPSHOT") {
+	library("Spring Kafka", "4.0.1") {
 		considerSnapshots()
 		group("org.springframework.kafka") {
 			modules = [
@@ -2520,7 +2516,7 @@ bom {
 			releaseNotes("https://github.com/spring-projects/spring-ldap/releases/tag/{version}")
 		}
 	}
-	library("Spring Pulsar", "2.0.1-SNAPSHOT") {
+	library("Spring Pulsar", "2.0.1") {
 		considerSnapshots()
 		group("org.springframework.pulsar") {
 			bom("spring-pulsar-bom")
@@ -2565,7 +2561,7 @@ bom {
 			releaseNotes("https://github.com/spring-projects/spring-security/releases/tag/{version}")
 		}
 	}
-	library("Spring Session", "4.0.1-SNAPSHOT") {
+	library("Spring Session", "4.0.1") {
 		considerSnapshots()
 		prohibit {
 			startsWith(["Apple-", "Bean-", "Corn-", "Dragonfruit-"])
@@ -2614,7 +2610,7 @@ bom {
 			releaseNotes("https://github.com/xerial/sqlite-jdbc/releases/tag/{version}")
 		}
 	}
-	library("Testcontainers", "2.0.2") {
+	library("Testcontainers", "2.0.3") {
 		group("org.testcontainers") {
 			bom("testcontainers-bom")
 		}
